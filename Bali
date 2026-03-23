@@ -1,86 +1,219 @@
-package com.acfc.automation.model;
+package com.acfc.automation.validation;
 
+import com.acfc.automation.model.TestCase;
+import com.acfc.automation.model.ValidationDetail;
+import io.restassured.path.json.JsonPath;
+import io.restassured.path.xml.XmlPath;
+import io.restassured.response.Response;
+import org.w3c.dom.Document;
+import org.xml.sax.InputSource;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathFactory;
+import java.io.StringReader;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
-public class ExecutionResult {
+public class ApiValidator {
 
-    private final String id;
-    private final String name;
-    private final String method;
-    private final String type;
-    private final String suite;
-    private final int expectedStatus;
-    private final int actualStatus;
-    private final String status;
-    private final long durationMs;
+    public ValidationOutcome validate(TestCase testCase, Response response) {
+        boolean passed = true;
+        List<ValidationDetail> details = new ArrayList<>();
 
-    private final Map<String, Object> extractedValues = new HashMap<>();
-    private final List<ValidationDetail> validationDetails = new ArrayList<>();
+        int actualStatus = response.getStatusCode();
 
-    public ExecutionResult(String id,
-                           String name,
-                           String method,
-                           String type,
-                           String suite,
-                           int expectedStatus,
-                           int actualStatus,
-                           String status,
-                           long durationMs) {
-        this.id = id;
-        this.name = name;
-        this.method = method;
-        this.type = type;
-        this.suite = suite;
-        this.expectedStatus = expectedStatus;
-        this.actualStatus = actualStatus;
-        this.status = status;
-        this.durationMs = durationMs;
+        if (testCase.getExpectedStatus() != null) {
+            boolean statusPass = Objects.equals(testCase.getExpectedStatus(), actualStatus);
+            if (!statusPass) {
+                passed = false;
+            }
+
+            details.add(new ValidationDetail(
+                    "STATUS",
+                    "statusCode",
+                    String.valueOf(testCase.getExpectedStatus()),
+                    String.valueOf(actualStatus),
+                    statusPass ? "PASS" : "FAIL"
+            ));
+        }
+
+        if (testCase.getExpectedHeaders() != null && !testCase.getExpectedHeaders().isEmpty()) {
+            for (Map.Entry<String, String> entry : testCase.getExpectedHeaders().entrySet()) {
+                String actualHeader = response.getHeader(entry.getKey());
+                boolean headerPass = Objects.equals(entry.getValue(), actualHeader);
+
+                if (!headerPass) {
+                    passed = false;
+                }
+
+                details.add(new ValidationDetail(
+                        "HEADER",
+                        entry.getKey(),
+                        entry.getValue(),
+                        actualHeader,
+                        headerPass ? "PASS" : "FAIL"
+                ));
+            }
+        }
+
+        String responseBody = response.getBody() == null ? "" : response.getBody().asString();
+        boolean looksLikeXml = responseBody.trim().startsWith("<");
+
+        if (testCase.getExpectedBodyJsonPaths() != null
+                && !testCase.getExpectedBodyJsonPaths().isEmpty()
+                && !responseBody.isBlank()) {
+
+            if (looksLikeXml) {
+                XmlPath xmlPath = new XmlPath(responseBody);
+
+                for (Map.Entry<String, Object> entry : testCase.getExpectedBodyJsonPaths().entrySet()) {
+                    Object actualValue;
+                    try {
+                        actualValue = xmlPath.get(entry.getKey());
+                    } catch (Exception e) {
+                        actualValue = null;
+                    }
+
+                    String expected = String.valueOf(entry.getValue());
+                    String actual = actualValue == null ? "" : String.valueOf(actualValue);
+                    boolean bodyPass = Objects.equals(expected, actual);
+
+                    if (!bodyPass) {
+                        passed = false;
+                    }
+
+                    details.add(new ValidationDetail(
+                            "BODY",
+                            entry.getKey(),
+                            expected,
+                            actual,
+                            bodyPass ? "PASS" : "FAIL"
+                    ));
+                }
+            } else {
+                JsonPath jsonPath = response.jsonPath();
+
+                for (Map.Entry<String, Object> entry : testCase.getExpectedBodyJsonPaths().entrySet()) {
+                    Object actualValue;
+                    try {
+                        actualValue = jsonPath.get(entry.getKey());
+                    } catch (Exception e) {
+                        actualValue = null;
+                    }
+
+                    String expected = String.valueOf(entry.getValue());
+                    String actual = actualValue == null ? "" : String.valueOf(actualValue);
+                    boolean bodyPass = Objects.equals(expected, actual);
+
+                    if (!bodyPass) {
+                        passed = false;
+                    }
+
+                    details.add(new ValidationDetail(
+                            "BODY",
+                            entry.getKey(),
+                            expected,
+                            actual,
+                            bodyPass ? "PASS" : "FAIL"
+                    ));
+                }
+            }
+        }
+
+        if (looksLikeXml
+                && testCase.getExpectedBodyXpaths() != null
+                && !testCase.getExpectedBodyXpaths().isEmpty()
+                && !responseBody.isBlank()) {
+
+            try {
+                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                factory.setNamespaceAware(false);
+
+                DocumentBuilder builder = factory.newDocumentBuilder();
+                Document doc = builder.parse(new InputSource(new StringReader(responseBody)));
+
+                XPath xpath = XPathFactory.newInstance().newXPath();
+
+                for (Map.Entry<String, String> entry : testCase.getExpectedBodyXpaths().entrySet()) {
+                    String expression = entry.getKey();
+                    String expected = entry.getValue();
+
+                    String actual;
+                    try {
+                        actual = xpath.evaluate(expression, doc);
+                    } catch (Exception e) {
+                        actual = "";
+                    }
+
+                    boolean xpathPass = Objects.equals(expected, actual);
+
+                    if (!xpathPass) {
+                        passed = false;
+                    }
+
+                    details.add(new ValidationDetail(
+                            "XPATH",
+                            expression,
+                            expected,
+                            actual,
+                            xpathPass ? "PASS" : "FAIL"
+                    ));
+                }
+            } catch (Exception e) {
+                passed = false;
+                details.add(new ValidationDetail(
+                        "XPATH",
+                        "documentParse",
+                        "valid xml document",
+                        e.getMessage(),
+                        "FAIL"
+                ));
+            }
+        }
+
+        if (testCase.getExpectedBodyContains() != null
+                && !testCase.getExpectedBodyContains().isEmpty()
+                && !responseBody.isBlank()) {
+
+            for (String expectedText : testCase.getExpectedBodyContains()) {
+                boolean containsPass = expectedText != null && responseBody.contains(expectedText);
+
+                if (!containsPass) {
+                    passed = false;
+                }
+
+                details.add(new ValidationDetail(
+                        "BODY_CONTAINS",
+                        "contains",
+                        expectedText,
+                        containsPass ? expectedText : "NOT FOUND",
+                        containsPass ? "PASS" : "FAIL"
+                ));
+            }
+        }
+
+        return new ValidationOutcome(passed, details);
     }
 
-    public String getId() {
-        return id;
-    }
+    public static class ValidationOutcome {
+        private final boolean passed;
+        private final List<ValidationDetail> details;
 
-    public String getName() {
-        return name;
-    }
+        public ValidationOutcome(boolean passed, List<ValidationDetail> details) {
+            this.passed = passed;
+            this.details = details;
+        }
 
-    public String getMethod() {
-        return method;
-    }
+        public boolean passed() {
+            return passed;
+        }
 
-    public String getType() {
-        return type;
-    }
-
-    public String getSuite() {
-        return suite;
-    }
-
-    public int getExpectedStatus() {
-        return expectedStatus;
-    }
-
-    public int getActualStatus() {
-        return actualStatus;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public long getDurationMs() {
-        return durationMs;
-    }
-
-    public Map<String, Object> getExtractedValues() {
-        return extractedValues;
-    }
-
-    public List<ValidationDetail> getValidationDetails() {
-        return validationDetails;
+        public List<ValidationDetail> details() {
+            return details;
+        }
     }
 }
