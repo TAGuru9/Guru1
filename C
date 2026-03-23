@@ -1,0 +1,198 @@
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+public class ApiExecutionEngine {
+
+    private final ApiValidator validator = new ApiValidator();
+
+    public ExecutionResult execute(TestCase testCase) {
+        long startTime = System.currentTimeMillis();
+
+        int expectedStatus = testCase.getExpectedStatus() == null ? 200 : testCase.getExpectedStatus();
+        int actualStatus = 0;
+        String finalStatus = "FAIL";
+
+        try {
+            String url = buildUrl(testCase);
+
+            System.out.println("==============================================================");
+            System.out.println("TC ID: " + testCase.getId());
+            System.out.println("Base URL Property: " + testCase.getBaseUrlProperty());
+            System.out.println("Resolved Base URL: " + FrameworkConfig.getProperty(testCase.getBaseUrlProperty()));
+            System.out.println("Endpoint: " + testCase.getEndpoint());
+            System.out.println("Final URL: " + url);
+            System.out.println("Method: " + testCase.getMethod());
+            System.out.println("Headers from test case: " + testCase.getHeaders());
+            System.out.println("==============================================================");
+
+            RequestSpecification request = RestAssured
+                    .given()
+                    .relaxedHTTPSValidation();
+
+            Map<String, String> resolvedHeaders = resolveHeaders(testCase.getHeaders());
+            if (!resolvedHeaders.isEmpty()) {
+                request.headers(resolvedHeaders);
+            }
+
+            System.out.println("Resolved Headers: " + resolvedHeaders);
+
+            String requestBody = null;
+            if (testCase.getPayloadFile() != null && !testCase.getPayloadFile().isBlank()) {
+                Path payloadPath = FrameworkConfig.testResourcesDir().resolve(testCase.getPayloadFile());
+                requestBody = Files.readString(payloadPath);
+
+                System.out.println("Payload File: " + payloadPath);
+                System.out.println("Request Body:");
+                System.out.println(requestBody);
+
+                request.body(requestBody);
+            }
+
+            Response response = executeRequest(request, testCase.getMethod(), url);
+            actualStatus = response.getStatusCode();
+
+            System.out.println("Actual Status Code: " + actualStatus);
+            System.out.println("Response Body: " + response.getBody().asString());
+
+            ApiValidator.ValidationOutcome outcome = validator.validate(testCase, response);
+            finalStatus = outcome.passed() ? "PASS" : "FAIL";
+
+            long durationMs = System.currentTimeMillis() - startTime;
+
+            ExecutionResult result = new ExecutionResult(
+                    testCase.getId(),
+                    testCase.getName(),
+                    testCase.getMethod(),
+                    testCase.getType(),
+                    testCase.getSuite(),
+                    expectedStatus,
+                    actualStatus,
+                    finalStatus,
+                    durationMs
+            );
+
+            applyExtractions(testCase, response, result);
+            return result;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+
+            long durationMs = System.currentTimeMillis() - startTime;
+
+            return new ExecutionResult(
+                    testCase.getId(),
+                    testCase.getName(),
+                    testCase.getMethod(),
+                    testCase.getType(),
+                    testCase.getSuite(),
+                    expectedStatus,
+                    actualStatus,
+                    "FAIL",
+                    durationMs
+            );
+        }
+    }
+
+    private Response executeRequest(RequestSpecification request, String method, String url) {
+        if (method == null || method.isBlank()) {
+            throw new IllegalArgumentException("HTTP method cannot be null or blank");
+        }
+
+        switch (method.trim().toUpperCase()) {
+            case "GET":
+                return request.when().get(url);
+            case "POST":
+                return request.when().post(url);
+            case "PUT":
+                return request.when().put(url);
+            case "PATCH":
+                return request.when().patch(url);
+            case "DELETE":
+                return request.when().delete(url);
+            case "OPTIONS":
+                return request.when().options(url);
+            case "HEAD":
+                return request.when().head(url);
+            default:
+                throw new IllegalArgumentException("Unsupported HTTP method: " + method);
+        }
+    }
+
+    private void applyExtractions(TestCase testCase, Response response, ExecutionResult result) {
+        List<ExtractionRule> extractions = testCase.getExtractions();
+
+        if (extractions == null || extractions.isEmpty()) {
+            return;
+        }
+
+        for (ExtractionRule ex : extractions) {
+            if (ex == null || ex.getKey() == null || ex.getJsonPath() == null) {
+                continue;
+            }
+
+            try {
+                Object value = response.jsonPath().get(ex.getJsonPath());
+                result.getExtractedValues().put(ex.getKey(), value);
+            } catch (Exception ignored) {
+                result.getExtractedValues().put(ex.getKey(), null);
+            }
+        }
+    }
+
+    private String buildUrl(TestCase testCase) {
+        String baseUrl = FrameworkConfig.getProperty(testCase.getBaseUrlProperty());
+        String endpoint = safe(testCase.getEndpoint());
+
+        if (baseUrl == null || baseUrl.isBlank()) {
+            throw new RuntimeException("Base URL is Null for Property: " + testCase.getBaseUrlProperty());
+        }
+
+        if (baseUrl.endsWith("/") && endpoint.startsWith("/")) {
+            return baseUrl.substring(0, baseUrl.length() - 1) + endpoint;
+        }
+
+        if (!baseUrl.endsWith("/") && !endpoint.startsWith("/") && !endpoint.isBlank()) {
+            return baseUrl + "/" + endpoint;
+        }
+
+        return baseUrl + endpoint;
+    }
+
+    private String resolveValue(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String trimmed = value.trim();
+
+        if (trimmed.startsWith("${") && trimmed.endsWith("}")) {
+            String key = trimmed.substring(2, trimmed.length() - 1).trim();
+            String resolved = FrameworkConfig.getProperty(key);
+            return (resolved != null && !resolved.isBlank()) ? resolved : value;
+        }
+
+        return value;
+    }
+
+    private Map<String, String> resolveHeaders(Map<String, String> headers) {
+        Map<String, String> resolved = new HashMap<>();
+
+        if (headers == null || headers.isEmpty()) {
+            return resolved;
+        }
+
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            resolved.put(entry.getKey(), resolveValue(entry.getValue()));
+        }
+
+        return resolved;
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
+    }
+}
