@@ -1,38 +1,86 @@
 package com.acfc.automation.model;
 
-public class ValidationDetail {
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
+public class ExecutionResult {
+
+    private final String id;
+    private final String name;
+    private final String method;
     private final String type;
-    private final String field;
-    private final String expected;
-    private final String actual;
+    private final String suite;
+    private final int expectedStatus;
+    private final int actualStatus;
     private final String status;
+    private final long durationMs;
 
-    public ValidationDetail(String type, String field, String expected, String actual, String status) {
+    private final Map<String, Object> extractedValues = new HashMap<>();
+    private final List<ValidationDetail> validationDetails = new ArrayList<>();
+
+    public ExecutionResult(String id,
+                           String name,
+                           String method,
+                           String type,
+                           String suite,
+                           int expectedStatus,
+                           int actualStatus,
+                           String status,
+                           long durationMs) {
+        this.id = id;
+        this.name = name;
+        this.method = method;
         this.type = type;
-        this.field = field;
-        this.expected = expected;
-        this.actual = actual;
+        this.suite = suite;
+        this.expectedStatus = expectedStatus;
+        this.actualStatus = actualStatus;
         this.status = status;
+        this.durationMs = durationMs;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getMethod() {
+        return method;
     }
 
     public String getType() {
         return type;
     }
 
-    public String getField() {
-        return field;
+    public String getSuite() {
+        return suite;
     }
 
-    public String getExpected() {
-        return expected;
+    public int getExpectedStatus() {
+        return expectedStatus;
     }
 
-    public String getActual() {
-        return actual;
+    public int getActualStatus() {
+        return actualStatus;
     }
 
     public String getStatus() {
         return status;
+    }
+
+    public long getDurationMs() {
+        return durationMs;
+    }
+
+    public Map<String, Object> getExtractedValues() {
+        return extractedValues;
+    }
+
+    public List<ValidationDetail> getValidationDetails() {
+        return validationDetails;
     }
 }
