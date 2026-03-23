@@ -7,6 +7,8 @@ import com.acfc.automation.model.TestCase;
 import com.acfc.automation.model.ValidationDetail;
 import com.acfc.automation.validation.ApiValidator;
 import io.restassured.RestAssured;
+import io.restassured.path.json.JsonPath;
+import io.restassured.path.xml.XmlPath;
 import io.restassured.response.Response;
 import io.restassured.specification.RequestSpecification;
 
@@ -34,7 +36,7 @@ public class ApiExecutionEngine {
             System.out.println("TC ID: " + testCase.getId());
             System.out.println("Base URL Property: " + testCase.getBaseUrlProperty());
             System.out.println("Resolved Base URL: " + FrameworkConfig.getProperty(testCase.getBaseUrlProperty()));
-            System.out.println("Endpoint: " + testCase.getEndpoint());
+            System.out.println("Endpoint: " + safe(testCase.getEndpoint()));
             System.out.println("Final URL: " + url);
             System.out.println("Method: " + testCase.getMethod());
             System.out.println("Headers from test case: " + testCase.getHeaders());
@@ -56,7 +58,11 @@ public class ApiExecutionEngine {
                 Path payloadPath = FrameworkConfig.testResourcesDir().resolve(testCase.getPayloadFile());
                 requestBody = Files.readString(payloadPath);
 
+                requestBody = applyPayloadData(requestBody, testCase.getPayloadData());
+                requestBody = resolveInlineProperties(requestBody);
+
                 System.out.println("Payload File: " + payloadPath);
+                System.out.println("Payload Data: " + testCase.getPayloadData());
                 System.out.println("Request Body:");
                 System.out.println(requestBody);
 
@@ -70,7 +76,10 @@ public class ApiExecutionEngine {
             System.out.println("Response Body: " + response.getBody().asString());
 
             ApiValidator.ValidationOutcome outcome = validator.validate(testCase, response);
+            System.out.println("Validator passed? " + outcome.passed());
+
             finalStatus = outcome.passed() ? "PASS" : "FAIL";
+            System.out.println("Final status set to: " + finalStatus);
 
             long durationMs = System.currentTimeMillis() - startTime;
 
@@ -100,6 +109,7 @@ public class ApiExecutionEngine {
                 );
             }
             System.out.println("----------------------------------------------------");
+            System.out.println("ExecutionResult status: " + result.getStatus());
 
             applyExtractions(testCase, response, result);
             return result;
@@ -155,17 +165,29 @@ public class ApiExecutionEngine {
             return;
         }
 
+        String responseBody = response.getBody() == null ? "" : response.getBody().asString();
+        boolean looksLikeXml = responseBody.trim().startsWith("<");
+
         for (ExtractionRule ex : extractions) {
-            if (ex == null || ex.getKey() == null || ex.getJsonPath() == null) {
+            if (ex == null || ex.getKey() == null) {
                 continue;
             }
 
+            Object value = null;
+
             try {
-                Object value = response.jsonPath().get(ex.getJsonPath());
-                result.getExtractedValues().put(ex.getKey(), value);
+                if (ex.getJsonPath() != null && !ex.getJsonPath().isBlank()) {
+                    JsonPath jsonPath = response.jsonPath();
+                    value = jsonPath.get(ex.getJsonPath());
+                } else if (looksLikeXml && ex.getXpath() != null && !ex.getXpath().isBlank()) {
+                    XmlPath xmlPath = new XmlPath(responseBody);
+                    value = xmlPath.get(ex.getXpath());
+                }
             } catch (Exception ignored) {
-                result.getExtractedValues().put(ex.getKey(), null);
             }
+
+            result.getExtractedValues().put(ex.getKey(), value);
+            System.out.println("Extracted: " + ex.getKey() + " = " + value);
         }
     }
 
@@ -188,6 +210,21 @@ public class ApiExecutionEngine {
         return baseUrl + endpoint;
     }
 
+    private Map<String, String> resolveHeaders(Map<String, String> headers) {
+        Map<String, String> resolved = new HashMap<>();
+
+        if (headers == null || headers.isEmpty()) {
+            return resolved;
+        }
+
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            String value = resolveValue(entry.getValue());
+            resolved.put(entry.getKey(), value);
+        }
+
+        return resolved;
+    }
+
     private String resolveValue(String value) {
         if (value == null) {
             return null;
@@ -198,21 +235,50 @@ public class ApiExecutionEngine {
         if (trimmed.startsWith("${") && trimmed.endsWith("}")) {
             String key = trimmed.substring(2, trimmed.length() - 1).trim();
             String resolved = FrameworkConfig.getProperty(key);
-            return (resolved != null && !resolved.isBlank()) ? resolved : value;
+            return (resolved != null) ? resolved : value;
         }
 
         return value;
     }
 
-    private Map<String, String> resolveHeaders(Map<String, String> headers) {
-        Map<String, String> resolved = new HashMap<>();
-
-        if (headers == null || headers.isEmpty()) {
-            return resolved;
+    private String applyPayloadData(String template, Map<String, String> payloadData) {
+        if (template == null || payloadData == null || payloadData.isEmpty()) {
+            return template;
         }
 
-        for (Map.Entry<String, String> entry : headers.entrySet()) {
-            resolved.put(entry.getKey(), resolveValue(entry.getValue()));
+        String resolved = template;
+        for (Map.Entry<String, String> entry : payloadData.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue() == null ? "" : entry.getValue();
+            resolved = resolved.replace("${" + key + "}", value);
+        }
+
+        return resolved;
+    }
+
+    private String resolveInlineProperties(String text) {
+        if (text == null || text.isBlank()) {
+            return text;
+        }
+
+        String resolved = text;
+        int start = resolved.indexOf("${");
+
+        while (start >= 0) {
+            int end = resolved.indexOf("}", start);
+            if (end < 0) {
+                break;
+            }
+
+            String token = resolved.substring(start + 2, end).trim();
+            String propertyValue = FrameworkConfig.getProperty(token);
+
+            if (propertyValue != null) {
+                resolved = resolved.substring(0, start) + propertyValue + resolved.substring(end + 1);
+                start = resolved.indexOf("${");
+            } else {
+                start = resolved.indexOf("${", end + 1);
+            }
         }
 
         return resolved;
