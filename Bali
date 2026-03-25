@@ -1,290 +1,36 @@
-package com.acfc.automation.engine;
+package com.acfc.automation.config;
 
-import com.acfc.automation.config.FrameworkConfig;
-import com.acfc.automation.model.ExecutionResult;
-import com.acfc.automation.model.ExtractionRule;
-import com.acfc.automation.model.TestCase;
-import com.acfc.automation.model.ValidationDetail;
-import com.acfc.automation.validation.ApiValidator;
-import io.restassured.RestAssured;
-import io.restassured.path.json.JsonPath;
-import io.restassured.path.xml.XmlPath;
-import io.restassured.response.Response;
-import io.restassured.specification.RequestSpecification;
+public class ExecutionArgumentReader {
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+    public static ExecutionContext loadFromArguments() {
 
-public class ApiExecutionEngine {
+        ExecutionContext ctx = new ExecutionContext();
 
-    private final ApiValidator validator = new ApiValidator();
+        ctx.setFramework(required("TA_FRAMEWORK"));
+        ctx.setSite(required("TA_SITE"));
+        ctx.setChangeId(required("TA_CHANGEID"));
+        ctx.setProduct(required("TA_PRODUCT"));
+        ctx.setApplication(required("TA_APPLICATION"));
+        ctx.setEnvType(required("TA_ENVTYPE"));
+        ctx.setRelease(required("TA_RELEASE"));
+        ctx.setTestSuiteType(required("TA_TESTSUITE_TYPE"));
+        ctx.setRepository(required("TA_REPOSITORY"));
+        ctx.setBuildGitBranch(required("TA_BUILD_GIT_BRANCH"));
+        ctx.setJob(required("TA_JOB"));
+        ctx.setStatusFile(required("TA_STATUS_FILE"));
 
-    public ExecutionResult execute(TestCase testCase) {
-        long startTime = System.currentTimeMillis();
+        return ctx;
+    }
 
-        int expectedStatus = testCase.getExpectedStatus() == null ? 200 : testCase.getExpectedStatus();
-        int actualStatus = 0;
-        String finalStatus = "FAIL";
+    private static String required(String key) {
+        String value = System.getProperty(key);
 
-        try {
-            String url = buildUrl(testCase);
-
-            System.out.println("==============================================================");
-            System.out.println("TC ID: " + testCase.getId());
-            System.out.println("Base URL Property: " + testCase.getBaseUrlProperty());
-            System.out.println("Resolved Base URL: " + FrameworkConfig.getProperty(testCase.getBaseUrlProperty()));
-            System.out.println("Endpoint: " + safe(testCase.getEndpoint()));
-            System.out.println("Final URL: " + url);
-            System.out.println("Method: " + testCase.getMethod());
-            System.out.println("Headers from test case: " + testCase.getHeaders());
-            System.out.println("==============================================================");
-
-            RequestSpecification request = RestAssured
-                    .given()
-                    .relaxedHTTPSValidation();
-
-            Map<String, String> resolvedHeaders = resolveHeaders(testCase.getHeaders());
-            if (!resolvedHeaders.isEmpty()) {
-                request.headers(resolvedHeaders);
-            }
-
-            System.out.println("Resolved Headers: " + resolvedHeaders);
-
-            String requestBody = null;
-            if (testCase.getPayloadFile() != null && !testCase.getPayloadFile().isBlank()) {
-                Path payloadPath = FrameworkConfig.testResourcesDir().resolve(testCase.getPayloadFile());
-                requestBody = Files.readString(payloadPath);
-
-                requestBody = applyPayloadData(requestBody, testCase.getPayloadData());
-                requestBody = resolveInlineProperties(requestBody);
-
-                System.out.println("Payload File: " + payloadPath);
-                System.out.println("Payload Data: " + testCase.getPayloadData());
-                System.out.println("Request Body:");
-                System.out.println(requestBody);
-
-                request.body(requestBody);
-            }
-
-            Response response = executeRequest(request, testCase.getMethod(), url);
-            actualStatus = response.getStatusCode();
-
-            System.out.println("Actual Status Code: " + actualStatus);
-            System.out.println("Response Body: " + response.getBody().asString());
-
-            ApiValidator.ValidationOutcome outcome = validator.validate(testCase, response);
-            System.out.println("Validator passed? " + outcome.passed());
-
-            finalStatus = outcome.passed() ? "PASS" : "FAIL";
-            System.out.println("Final status set to: " + finalStatus);
-
-            long durationMs = System.currentTimeMillis() - startTime;
-
-            ExecutionResult result = new ExecutionResult(
-                    testCase.getId(),
-                    testCase.getName(),
-                    testCase.getMethod(),
-                    testCase.getType(),
-                    testCase.getSuite(),
-                    expectedStatus,
-                    actualStatus,
-                    finalStatus,
-                    durationMs
-            );
-
-            result.getValidationDetails().addAll(outcome.details());
-
-            System.out.println("---------------- VALIDATION DETAILS ----------------");
-            for (ValidationDetail detail : outcome.details()) {
-                System.out.printf(
-                        "%-14s | Field: %-80s | Expected: %-25s | Actual: %-25s | %s%n",
-                        detail.getType(),
-                        safe(detail.getField()),
-                        safe(detail.getExpected()),
-                        safe(detail.getActual()),
-                        detail.getStatus()
-                );
-            }
-            System.out.println("----------------------------------------------------");
-            System.out.println("ExecutionResult status: " + result.getStatus());
-
-            applyExtractions(testCase, response, result);
-            return result;
-
-        } catch (Exception e) {
-            e.printStackTrace();
-
-            long durationMs = System.currentTimeMillis() - startTime;
-
-            return new ExecutionResult(
-                    testCase.getId(),
-                    testCase.getName(),
-                    testCase.getMethod(),
-                    testCase.getType(),
-                    testCase.getSuite(),
-                    expectedStatus,
-                    actualStatus,
-                    "FAIL",
-                    durationMs
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                "Missing required argument: -D" + key + "=<value>"
             );
         }
-    }
 
-    private Response executeRequest(RequestSpecification request, String method, String url) {
-        if (method == null || method.isBlank()) {
-            throw new IllegalArgumentException("HTTP method cannot be null or blank");
-        }
-
-        switch (method.trim().toUpperCase()) {
-            case "GET":
-                return request.when().get(url);
-            case "POST":
-                return request.when().post(url);
-            case "PUT":
-                return request.when().put(url);
-            case "PATCH":
-                return request.when().patch(url);
-            case "DELETE":
-                return request.when().delete(url);
-            case "OPTIONS":
-                return request.when().options(url);
-            case "HEAD":
-                return request.when().head(url);
-            default:
-                throw new IllegalArgumentException("Unsupported HTTP method: " + method);
-        }
-    }
-
-    private void applyExtractions(TestCase testCase, Response response, ExecutionResult result) {
-        List<ExtractionRule> extractions = testCase.getExtractions();
-
-        if (extractions == null || extractions.isEmpty()) {
-            return;
-        }
-
-        String responseBody = response.getBody() == null ? "" : response.getBody().asString();
-        boolean looksLikeXml = responseBody.trim().startsWith("<");
-
-        for (ExtractionRule ex : extractions) {
-            if (ex == null || ex.getKey() == null) {
-                continue;
-            }
-
-            Object value = null;
-
-            try {
-                if (ex.getJsonPath() != null && !ex.getJsonPath().isBlank()) {
-                    JsonPath jsonPath = response.jsonPath();
-                    value = jsonPath.get(ex.getJsonPath());
-                } else if (looksLikeXml && ex.getXpath() != null && !ex.getXpath().isBlank()) {
-                    XmlPath xmlPath = new XmlPath(responseBody);
-                    value = xmlPath.get(ex.getXpath());
-                }
-            } catch (Exception ignored) {
-            }
-
-            result.getExtractedValues().put(ex.getKey(), value);
-            System.out.println("Extracted: " + ex.getKey() + " = " + value);
-        }
-    }
-
-    private String buildUrl(TestCase testCase) {
-        String baseUrl = FrameworkConfig.getProperty(testCase.getBaseUrlProperty());
-        String endpoint = safe(testCase.getEndpoint());
-
-        if (baseUrl == null || baseUrl.isBlank()) {
-            throw new RuntimeException("Base URL is Null for Property: " + testCase.getBaseUrlProperty());
-        }
-
-        if (baseUrl.endsWith("/") && endpoint.startsWith("/")) {
-            return baseUrl.substring(0, baseUrl.length() - 1) + endpoint;
-        }
-
-        if (!baseUrl.endsWith("/") && !endpoint.startsWith("/") && !endpoint.isBlank()) {
-            return baseUrl + "/" + endpoint;
-        }
-
-        return baseUrl + endpoint;
-    }
-
-    private Map<String, String> resolveHeaders(Map<String, String> headers) {
-        Map<String, String> resolved = new HashMap<>();
-
-        if (headers == null || headers.isEmpty()) {
-            return resolved;
-        }
-
-        for (Map.Entry<String, String> entry : headers.entrySet()) {
-            String value = resolveValue(entry.getValue());
-            resolved.put(entry.getKey(), value);
-        }
-
-        return resolved;
-    }
-
-    private String resolveValue(String value) {
-        if (value == null) {
-            return null;
-        }
-
-        String trimmed = value.trim();
-
-        if (trimmed.startsWith("${") && trimmed.endsWith("}")) {
-            String key = trimmed.substring(2, trimmed.length() - 1).trim();
-            String resolved = FrameworkConfig.getProperty(key);
-            return (resolved != null) ? resolved : value;
-        }
-
-        return value;
-    }
-
-    private String applyPayloadData(String template, Map<String, String> payloadData) {
-        if (template == null || payloadData == null || payloadData.isEmpty()) {
-            return template;
-        }
-
-        String resolved = template;
-        for (Map.Entry<String, String> entry : payloadData.entrySet()) {
-            String key = entry.getKey();
-            String value = entry.getValue() == null ? "" : entry.getValue();
-            resolved = resolved.replace("${" + key + "}", value);
-        }
-
-        return resolved;
-    }
-
-    private String resolveInlineProperties(String text) {
-        if (text == null || text.isBlank()) {
-            return text;
-        }
-
-        String resolved = text;
-        int start = resolved.indexOf("${");
-
-        while (start >= 0) {
-            int end = resolved.indexOf("}", start);
-            if (end < 0) {
-                break;
-            }
-
-            String token = resolved.substring(start + 2, end).trim();
-            String propertyValue = FrameworkConfig.getProperty(token);
-
-            if (propertyValue != null) {
-                resolved = resolved.substring(0, start) + propertyValue + resolved.substring(end + 1);
-                start = resolved.indexOf("${");
-            } else {
-                start = resolved.indexOf("${", end + 1);
-            }
-        }
-
-        return resolved;
-    }
-
-    private String safe(String value) {
-        return value == null ? "" : value;
+        return value.trim();
     }
 }
