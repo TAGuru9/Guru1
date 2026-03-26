@@ -1,70 +1,37 @@
 package com.acfc.automation.db;
 
+import com.acfc.automation.context.ScenarioContext;
+
 import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
-public class DbQueryUtil {
+public class DbStepExecutor {
 
-    private DbQueryUtil() {
+    private DbStepExecutor() {
     }
 
-    public static List<Map<String, Object>> executeQuery(Connection connection, String sql) {
-        if (connection == null) {
-            throw new IllegalArgumentException("Connection cannot be null");
+    public static void executeAndStore(DbConfig dbConfig, String sql) {
+        if (dbConfig == null) {
+            throw new IllegalArgumentException("DbConfig cannot be null");
         }
 
         if (sql == null || sql.trim().isEmpty()) {
             throw new IllegalArgumentException("SQL cannot be null or empty");
         }
 
-        List<Map<String, Object>> results = new ArrayList<>();
+        try (Connection connection = DbConnectionManager.getConnection(dbConfig)) {
+            System.out.println("[DB] Executing query:");
+            System.out.println(sql);
 
-        try (Statement stmt = connection.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+            Map<String, String> firstRow = DbQueryUtil.executeQueryAndGetFirstRow(connection, sql);
 
-            ResultSetMetaData metaData = rs.getMetaData();
-            int columnCount = metaData.getColumnCount();
-
-            while (rs.next()) {
-                Map<String, Object> row = new LinkedHashMap<>();
-
-                for (int i = 1; i <= columnCount; i++) {
-                    String columnName = metaData.getColumnLabel(i);
-                    Object value = rs.getObject(i);
-                    row.put(columnName, value);
-                }
-
-                results.add(row);
+            for (Map.Entry<String, String> entry : firstRow.entrySet()) {
+                ScenarioContext.set(entry.getKey(), entry.getValue());
+                System.out.println("[DB->VAR] " + entry.getKey() + " = " + entry.getValue());
             }
 
-            return results;
-
-        } catch (SQLException e) {
-            throw new RuntimeException("DB query execution failed. SQL: " + sql, e);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to execute DB step and store variables", e);
         }
-    }
-
-    public static Map<String, String> executeQueryAndGetFirstRow(Connection connection, String sql) {
-        List<Map<String, Object>> rows = executeQuery(connection, sql);
-
-        if (rows.isEmpty()) {
-            throw new RuntimeException("No rows returned for SQL: " + sql);
-        }
-
-        Map<String, Object> firstRow = rows.get(0);
-        Map<String, String> result = new LinkedHashMap<>();
-
-        for (Map.Entry<String, Object> entry : firstRow.entrySet()) {
-            result.put(entry.getKey(), entry.getValue() == null ? "" : String.valueOf(entry.getValue()));
-        }
-
-        return result;
     }
 }
