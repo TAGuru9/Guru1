@@ -1,31 +1,37 @@
-package com.acfc.automation.context;
+package com.acfc.automation.db;
 
-import java.util.HashMap;
+import com.acfc.automation.context.ScenarioContext;
+
+import java.sql.Connection;
 import java.util.Map;
 
-public class ScenarioContext {
+public class DbStepExecutor {
 
-    private static final ThreadLocal<Map<String, String>> CONTEXT =
-            new ThreadLocal<Map<String, String>>() {
-                @Override
-                protected Map<String, String> initialValue() {
-                    return new HashMap<String, String>();
-                }
-            };
-
-    private ScenarioContext() {
+    private DbStepExecutor() {
     }
 
-    public static void set(String key, String value) {
-        CONTEXT.get().put(key, value);
-    }
+    public static void executeAndStore(DbConfig dbConfig, String sql) {
+        if (dbConfig == null) {
+            throw new IllegalArgumentException("DbConfig cannot be null");
+        }
 
-    public static String get(String key) {
-        return CONTEXT.get().get(key);
-    }
+        if (sql == null || sql.trim().isEmpty()) {
+            throw new IllegalArgumentException("SQL cannot be null or empty");
+        }
 
-    public static void clear() {
-        CONTEXT.get().clear();
-        CONTEXT.remove();
+        try (Connection connection = DbConnectionManager.getConnection(dbConfig.getConnectionName())) {
+            System.out.println("[DB] Executing query:");
+            System.out.println(sql);
+
+            Map<String, String> firstRow = DbQueryUtil.executeQueryAndGetFirstRow(connection, sql);
+
+            for (Map.Entry<String, String> entry : firstRow.entrySet()) {
+                ScenarioContext.set(entry.getKey(), entry.getValue());
+                System.out.println("[DB->VAR] " + entry.getKey() + " = " + entry.getValue());
+            }
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to execute DB step and store variables", e);
+        }
     }
 }
