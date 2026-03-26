@@ -1,37 +1,37 @@
-package com.acfc.automation.db;
+package com.acfc.automation.util;
 
 import com.acfc.automation.context.ScenarioContext;
 
-import java.sql.Connection;
-import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-public class DbStepExecutor {
+public class VariableResolver {
 
-    private DbStepExecutor() {
+    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{([^}]+)}");
+
+    private VariableResolver() {
     }
 
-    public static void executeAndStore(DbConfig dbConfig, String sql) {
-        if (dbConfig == null) {
-            throw new IllegalArgumentException("DbConfig cannot be null");
+    public static String resolve(String input) {
+        if (input == null || input.isEmpty()) {
+            return input;
         }
 
-        if (sql == null || sql.trim().isEmpty()) {
-            throw new IllegalArgumentException("SQL cannot be null or empty");
-        }
+        Matcher matcher = PLACEHOLDER_PATTERN.matcher(input);
+        StringBuffer resolved = new StringBuffer();
 
-        try (Connection connection = DbConnectionManager.getConnection(dbConfig)) {
-            System.out.println("[DB] Executing query:");
-            System.out.println(sql);
+        while (matcher.find()) {
+            String key = matcher.group(1);
+            String value = ScenarioContext.get(key);
 
-            Map<String, String> firstRow = DbQueryUtil.executeQueryAndGetFirstRow(connection, sql);
-
-            for (Map.Entry<String, String> entry : firstRow.entrySet()) {
-                ScenarioContext.set(entry.getKey(), entry.getValue());
-                System.out.println("[DB->VAR] " + entry.getKey() + " = " + entry.getValue());
+            if (value == null) {
+                throw new RuntimeException("No variable found for placeholder: ${" + key + "}");
             }
 
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to execute DB step and store variables", e);
+            matcher.appendReplacement(resolved, Matcher.quoteReplacement(value));
         }
+
+        matcher.appendTail(resolved);
+        return resolved.toString();
     }
 }
