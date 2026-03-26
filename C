@@ -1,35 +1,47 @@
-package com.acfc.automation.db;
+package com.company.core.db;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
+import java.sql.*;
+import java.util.*;
 
-public class DbConnectionManager {
+public class DbQueryUtil {
 
-    public static Connection getConnection(String connectionName) throws SQLException {
+    public static List<Map<String, Object>> executeQuery(Connection connection, String sql) throws SQLException {
+        List<Map<String, Object>> results = new ArrayList<>();
 
-        DbConfig config = DbAutoConfigResolver.resolve(connectionName);
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
 
-        try {
-            Class.forName(config.getDriver());
-        } catch (ClassNotFoundException e) {
-            throw new RuntimeException("DB driver not found: " + config.getDriver(), e);
+            ResultSetMetaData metaData = rs.getMetaData();
+            int columnCount = metaData.getColumnCount();
+
+            while (rs.next()) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                for (int i = 1; i <= columnCount; i++) {
+                    String columnName = metaData.getColumnLabel(i);
+                    Object value = rs.getObject(i);
+                    row.put(columnName, value);
+                }
+                results.add(row);
+            }
         }
 
-        System.out.println("[DB] connectionName=" + connectionName);
-        System.out.println("[DB] source=" + config.getSource());
-        System.out.println("[DB] driver=" + config.getDriver());
-        System.out.println("[DB] mode=" + (config.hasSqlAuth() ? "SQL_AUTH" : "WINDOWS_AUTH"));
-        System.out.println("[DB] url=" + config.getUrl());
+        return results;
+    }
 
-        if (config.hasSqlAuth()) {
-            return DriverManager.getConnection(
-                    config.getUrl(),
-                    config.getUsername(),
-                    config.getPassword()
-            );
+    public static Map<String, String> firstRowAsStringMap(Connection connection, String sql) throws SQLException {
+        List<Map<String, Object>> rows = executeQuery(connection, sql);
+
+        if (rows.isEmpty()) {
+            throw new SQLException("No rows returned for query: " + sql);
         }
 
-        return DriverManager.getConnection(config.getUrl());
+        Map<String, Object> firstRow = rows.get(0);
+        Map<String, String> output = new LinkedHashMap<>();
+
+        for (Map.Entry<String, Object> entry : firstRow.entrySet()) {
+            output.put(entry.getKey(), entry.getValue() == null ? "" : String.valueOf(entry.getValue()));
+        }
+
+        return output;
     }
 }
