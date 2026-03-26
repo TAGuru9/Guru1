@@ -1,11 +1,27 @@
-package com.company.core.db;
+package com.acfc.automation.db;
 
-import java.sql.*;
-import java.util.*;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 public class DbQueryUtil {
 
-    public static List<Map<String, Object>> executeQuery(Connection connection, String sql) throws SQLException {
+    private DbQueryUtil() {
+    }
+
+    public static List<Map<String, Object>> executeQuery(Connection connection, String sql) {
+        if (connection == null) {
+            throw new IllegalArgumentException("Connection cannot be null");
+        }
+        if (sql == null || sql.trim().isEmpty()) {
+            throw new IllegalArgumentException("SQL cannot be null or empty");
+        }
 
         List<Map<String, Object>> results = new ArrayList<>();
 
@@ -26,8 +42,43 @@ public class DbQueryUtil {
 
                 results.add(row);
             }
+
+            return results;
+
+        } catch (SQLException e) {
+            throw new RuntimeException("DB query execution failed. SQL: " + sql, e);
+        }
+    }
+
+    public static Map<String, String> executeQueryAndGetFirstRow(Connection connection, String sql) {
+        List<Map<String, Object>> rows = executeQuery(connection, sql);
+
+        if (rows.isEmpty()) {
+            throw new RuntimeException("No rows returned for SQL: " + sql);
         }
 
-        return results;
+        Map<String, Object> firstRow = rows.get(0);
+        Map<String, String> result = new LinkedHashMap<>();
+
+        for (Map.Entry<String, Object> entry : firstRow.entrySet()) {
+            result.put(entry.getKey(), entry.getValue() == null ? "" : String.valueOf(entry.getValue()));
+        }
+
+        return result;
+    }
+
+    public static void printResults(List<Map<String, Object>> rows) {
+        if (rows == null || rows.isEmpty()) {
+            System.out.println("[DB] No rows returned");
+            return;
+        }
+
+        for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
+            Map<String, Object> row = rows.get(rowIndex);
+            System.out.println("[DB] Row " + (rowIndex + 1) + ":");
+            for (Map.Entry<String, Object> entry : row.entrySet()) {
+                System.out.println("    " + entry.getKey() + " = " + entry.getValue());
+            }
+        }
     }
 }
