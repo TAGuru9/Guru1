@@ -1,94 +1,56 @@
-package com.acfc.automation.model;
-
-import java.util.List;
-import java.util.Map;
-
-public class TestCase {
-
-    private String id;
-    private String name;
-    private String type;
-    private String suite;
-    private String project;
-    private String method;
-    private String baseUrlProperty;
-    private String endpoint;
-    private Map<String, String> headers;
-    private Map<String, String> expectedHeaders;
-    private Map<String, Object> expectedBodyJsonPaths;
-    private Map<String, String> expectedBodyXpaths;
-    private List<String> expectedBodyContains;
-    private String payloadFile;
-    private List<ExtractionRule> extractions;
-    private Boolean enabled;
-
-    public String getId() {
-        return id;
+private void applyDbValidation(TestCase testCase, Response response, ExecutionResult result, ExtentTest extentTest) {
+    if (testCase.getDbQuery() == null) {
+        return;
     }
 
-    public String getName() {
-        return name;
-    }
+    DbQuery dbQuery = testCase.getDbQuery();
 
-    public String getType() {
-        return type;
-    }
+    try {
+        String sql = resolveInlineProperties(dbQuery.sql);
+        sql = replaceContextValues(sql);
 
-    public String getSuite() {
-        return suite;
-    }
+        DbQueryResult dbResult = DbQueryExecutor.execute(dbQuery.connection, sql);
 
-    public String getProject() {
-        return project;
-    }
+        String dbValue = null;
+        if (dbResult != null && dbResult.rows != null && !dbResult.rows.isEmpty()) {
+            Object value = dbResult.rows.get(0).get(dbQuery.compareColumn);
+            dbValue = value == null ? null : value.toString();
+        }
 
-    public String getMethod() {
-        return method;
-    }
+        String apiValue = null;
+        String responseBody = response.getBody() == null ? "" : response.getBody().asString();
 
-    public String getBaseUrlProperty() {
-        return baseUrlProperty;
-    }
+        if (dbQuery.expectedResponseXPath != null && !dbQuery.expectedResponseXPath.isBlank()) {
+            javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(false);
 
-    public String getEndpoint() {
-        return endpoint;
-    }
+            javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(
+                    new org.xml.sax.InputSource(new java.io.StringReader(responseBody))
+            );
 
-    public Map<String, String> getHeaders() {
-        return headers;
-    }
+            javax.xml.xpath.XPath xpath = javax.xml.xpath.XPathFactory.newInstance().newXPath();
+            apiValue = xpath.evaluate(dbQuery.expectedResponseXPath, doc);
+        }
 
-    public Map<String, String> getExpectedHeaders() {
-        return expectedHeaders;
-    }
+        String summary = "DB Validation | API Value: " + apiValue + " | DB Value: " + dbValue;
+        result.setDbSummary(summary);
+        extentTest.info(summary);
 
-    public Map<String, Object> getExpectedBodyJsonPaths() {
-        return expectedBodyJsonPaths;
-    }
+        if (safe(apiValue).equals(safe(dbValue))) {
+            extentTest.pass("DB Validation Passed");
+        } else {
+            extentTest.fail("DB Validation Failed");
+            result.setStatus("FAIL");
+        }
 
-    public Map<String, String> getExpectedBodyXpaths() {
-        return expectedBodyXpaths;
-    }
+        if (dbQuery.resultKey != null && !dbQuery.resultKey.isBlank()) {
+            com.acfc.automation.context.ExecutionContext.put(dbQuery.resultKey, dbValue);
+        }
 
-    public List<String> getExpectedBodyContains() {
-        return expectedBodyContains;
+    } catch (Exception e) {
+        extentTest.fail("DB validation error: " + e.getMessage());
+        result.setStatus("FAIL");
+        throw new RuntimeException("DB validation failed", e);
     }
-
-    public String getPayloadFile() {
-        return payloadFile;
-    }
-
-    public List<ExtractionRule> getExtractions() {
-        return extractions;
-    }
-
-    public Boolean getEnabled() {
-        return enabled;
-    }
-
-    public Integer getExpectedStatus() {
-        return expectedStatus;
-    }
-
-    private Integer expectedStatus;
 }
