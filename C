@@ -1,42 +1,35 @@
 package com.acfc.automation.db;
 
-import com.acfc.automation.config.FrameworkConfig;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 
-public class DbAutoConfigResolver {
+public class DbConnectionManager {
 
-    public static DbConfig resolve(String connectionName) {
-        if (connectionName == null || connectionName.trim().isEmpty()) {
-            throw new IllegalArgumentException("connectionName cannot be null or empty");
+    public static Connection getConnection(String connectionName) throws SQLException {
+
+        DbConfig config = DbAutoConfigResolver.resolve(connectionName);
+
+        try {
+            Class.forName(config.getDriver());
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException("DB driver not found: " + config.getDriver(), e);
         }
 
-        String prefix = "db." + connectionName + ".";
+        System.out.println("[DB] connectionName=" + connectionName);
+        System.out.println("[DB] source=" + config.getSource());
+        System.out.println("[DB] driver=" + config.getDriver());
+        System.out.println("[DB] mode=" + (config.hasSqlAuth() ? "SQL_AUTH" : "WINDOWS_AUTH"));
+        System.out.println("[DB] url=" + config.getUrl());
 
-        String driver = FrameworkConfig.getProperty(prefix + "driver");
-        String url = FrameworkConfig.getProperty(prefix + "url");
-        String username = FrameworkConfig.getProperty(prefix + "username");
-        String password = FrameworkConfig.getProperty(prefix + "password");
-
-        if (isBlank(driver)) {
-            throw new IllegalArgumentException("Missing DB property: " + prefix + "driver");
+        if (config.hasSqlAuth()) {
+            return DriverManager.getConnection(
+                    config.getUrl(),
+                    config.getUsername(),
+                    config.getPassword()
+            );
         }
-        if (isBlank(url)) {
-            throw new IllegalArgumentException("Missing DB property: " + prefix + "url");
-        }
 
-        return new DbConfig(
-                driver.trim(),
-                url.trim(),
-                trimToNull(username),
-                trimToNull(password),
-                "properties"
-        );
-    }
-
-    private static boolean isBlank(String value) {
-        return value == null || value.trim().isEmpty();
-    }
-
-    private static String trimToNull(String value) {
-        return isBlank(value) ? null : value.trim();
+        return DriverManager.getConnection(config.getUrl());
     }
 }
