@@ -1,37 +1,26 @@
-package com.acfc.automation.util;
+package com.acfc.automation.context;
 
-import com.acfc.automation.context.ScenarioContext;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+public class ScenarioContext {
 
-public class VariableResolver {
+    private static final ThreadLocal<Map<String, String>> CONTEXT =
+            ThreadLocal.withInitial(LinkedHashMap::new);
 
-    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{([^}]+)}");
-
-    private VariableResolver() {
+    private ScenarioContext() {
     }
 
-    public static String resolve(String input) {
-        if (input == null || input.isEmpty()) {
-            return input;
-        }
+    public static void set(String key, String value) {
+        CONTEXT.get().put(key, value);
+    }
 
-        Matcher matcher = PLACEHOLDER_PATTERN.matcher(input);
-        StringBuffer resolved = new StringBuffer();
+    public static String get(String key) {
+        return CONTEXT.get().get(key);
+    }
 
-        while (matcher.find()) {
-            String key = matcher.group(1);
-            String value = ScenarioContext.get(key);
-
-            if (value == null) {
-                throw new RuntimeException("No variable found for placeholder: ${" + key + "}");
-            }
-
-            matcher.appendReplacement(resolved, Matcher.quoteReplacement(value));
-        }
-
-        matcher.appendTail(resolved);
-        return resolved.toString();
+    public static void clear() {
+        CONTEXT.get().clear();
+        CONTEXT.remove();
     }
 }
