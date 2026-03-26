@@ -1,76 +1,47 @@
-package com..automation.db;
+package com.acfc.automation.db;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+public class DbConfig {
 
-public class DbQueryExecutor {
+    private final String driver;
+    private final String url;
+    private final String username;
+    private final String password;
+    private final String source;
 
-    public static DbQueryResult executeQuery(String connectionName, String sql, List<Object> params) {
-        DbQueryResult result = new DbQueryResult();
-        result.connectionName = connectionName;
-        result.sql = sql;
-        result.params = params == null ? new ArrayList<>() : params;
-
-        System.out.println("Testing DB execute...");
-        System.out.println("Connection Name: " + connectionName);
-        System.out.println("SQL: " + sql);
-
-        try (Connection connection = DbConnectionManager.getConnection(connectionName);
-             PreparedStatement ps = connection.prepareStatement(sql)) {
-
-            bindParams(ps, result.params);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                ResultSetMetaData metaData = rs.getMetaData();
-                int columnCount = metaData.getColumnCount();
-
-                while (rs.next()) {
-                    Map<String, Object> row = new LinkedHashMap<>();
-                    for (int i = 1; i <= columnCount; i++) {
-                        row.put(metaData.getColumnLabel(i), rs.getObject(i));
-                    }
-                    result.rows.add(row);
-                }
-            }
-
-            result.rowCount = result.rows.size();
-
-            if (result.rowCount == 0) {
-                result.status = "FAIL";
-                result.message = "Query returned 0 rows";
-            } else {
-                result.status = "PASS";
-                result.message = "DB query executed successfully";
-                System.out.println("Rows fetched: " + result.rowCount);
-                System.out.println("First row: " + result.rows.get(0));
-            }
-
-            return result;
-
-        } catch (Exception e) {
-            result.status = "FAIL";
-            result.message = e.getMessage();
-            e.printStackTrace();
-            return result;
-        }
+    public DbConfig(String driver, String url, String username, String password) {
+        this(driver, url, username, password, "properties");
     }
 
-    public static DbQueryResult execute(String connectionName, String sql) {
-        return executeQuery(connectionName, sql, new ArrayList<>());
+    public DbConfig(String driver, String url, String username, String password, String source) {
+        this.driver = driver;
+        this.url = url;
+        this.username = username;
+        this.password = password;
+        this.source = source;
     }
 
-    private static void bindParams(PreparedStatement ps, List<Object> params) throws SQLException {
-        if (params == null) return;
+    public String getDriver() {
+        return driver;
+    }
 
-        for (int i = 0; i < params.size(); i++) {
-            ps.setObject(i + 1, params.get(i));
-        }
+    public String getUrl() {
+        return url;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    public boolean hasSqlAuth() {
+        return username != null && !username.trim().isEmpty()
+                && password != null && !password.trim().isEmpty();
     }
 }
