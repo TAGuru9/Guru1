@@ -6,6 +6,7 @@ import java.util.*;
 public class DbQueryUtil {
 
     public static List<Map<String, Object>> executeQuery(Connection connection, String sql) throws SQLException {
+
         List<Map<String, Object>> results = new ArrayList<>();
 
         try (Statement stmt = connection.createStatement();
@@ -16,32 +17,17 @@ public class DbQueryUtil {
 
             while (rs.next()) {
                 Map<String, Object> row = new LinkedHashMap<>();
+
                 for (int i = 1; i <= columnCount; i++) {
                     String columnName = metaData.getColumnLabel(i);
                     Object value = rs.getObject(i);
                     row.put(columnName, value);
                 }
+
                 results.add(row);
             }
         }
 
         return results;
-    }
-
-    public static Map<String, String> firstRowAsStringMap(Connection connection, String sql) throws SQLException {
-        List<Map<String, Object>> rows = executeQuery(connection, sql);
-
-        if (rows.isEmpty()) {
-            throw new SQLException("No rows returned for query: " + sql);
-        }
-
-        Map<String, Object> firstRow = rows.get(0);
-        Map<String, String> output = new LinkedHashMap<>();
-
-        for (Map.Entry<String, Object> entry : firstRow.entrySet()) {
-            output.put(entry.getKey(), entry.getValue() == null ? "" : String.valueOf(entry.getValue()));
-        }
-
-        return output;
     }
 }
