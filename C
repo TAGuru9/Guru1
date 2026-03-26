@@ -1,84 +1,34 @@
-package com.acfc.automation.db;
+package com.acfc.automation.context;
 
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
-public class DbQueryUtil {
+public class ScenarioContext {
 
-    private DbQueryUtil() {
+    private static final ThreadLocal<Map<String, String>> CONTEXT =
+            ThreadLocal.withInitial(LinkedHashMap::new);
+
+    private ScenarioContext() {
     }
 
-    public static List<Map<String, Object>> executeQuery(Connection connection, String sql) {
-        if (connection == null) {
-            throw new IllegalArgumentException("Connection cannot be null");
-        }
-        if (sql == null || sql.trim().isEmpty()) {
-            throw new IllegalArgumentException("SQL cannot be null or empty");
-        }
-
-        List<Map<String, Object>> results = new ArrayList<>();
-
-        try (Statement stmt = connection.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-
-            ResultSetMetaData metaData = rs.getMetaData();
-            int columnCount = metaData.getColumnCount();
-
-            while (rs.next()) {
-                Map<String, Object> row = new LinkedHashMap<>();
-
-                for (int i = 1; i <= columnCount; i++) {
-                    String columnName = metaData.getColumnLabel(i);
-                    Object value = rs.getObject(i);
-                    row.put(columnName, value);
-                }
-
-                results.add(row);
-            }
-
-            return results;
-
-        } catch (SQLException e) {
-            throw new RuntimeException("DB query execution failed. SQL: " + sql, e);
-        }
+    public static void set(String key, String value) {
+        CONTEXT.get().put(key, value);
     }
 
-    public static Map<String, String> executeQueryAndGetFirstRow(Connection connection, String sql) {
-        List<Map<String, Object>> rows = executeQuery(connection, sql);
-
-        if (rows.isEmpty()) {
-            throw new RuntimeException("No rows returned for SQL: " + sql);
-        }
-
-        Map<String, Object> firstRow = rows.get(0);
-        Map<String, String> result = new LinkedHashMap<>();
-
-        for (Map.Entry<String, Object> entry : firstRow.entrySet()) {
-            result.put(entry.getKey(), entry.getValue() == null ? "" : String.valueOf(entry.getValue()));
-        }
-
-        return result;
+    public static String get(String key) {
+        return CONTEXT.get().get(key);
     }
 
-    public static void printResults(List<Map<String, Object>> rows) {
-        if (rows == null || rows.isEmpty()) {
-            System.out.println("[DB] No rows returned");
-            return;
-        }
+    public static boolean contains(String key) {
+        return CONTEXT.get().containsKey(key);
+    }
 
-        for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
-            Map<String, Object> row = rows.get(rowIndex);
-            System.out.println("[DB] Row " + (rowIndex + 1) + ":");
-            for (Map.Entry<String, Object> entry : row.entrySet()) {
-                System.out.println("    " + entry.getKey() + " = " + entry.getValue());
-            }
-        }
+    public static Map<String, String> getAll() {
+        return new LinkedHashMap<>(CONTEXT.get());
+    }
+
+    public static void clear() {
+        CONTEXT.get().clear();
+        CONTEXT.remove();
     }
 }
