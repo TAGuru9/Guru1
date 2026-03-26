@@ -1,47 +1,38 @@
 package com.acfc.automation.db;
 
-public class DbConfig {
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 
-    private final String driver;
-    private final String url;
-    private final String username;
-    private final String password;
-    private final String source;
+public class DbConnectionManager {
 
-    public DbConfig(String driver, String url, String username, String password) {
-        this(driver, url, username, password, "properties");
+    public static Connection getConnection(String connectionName) throws SQLException {
+        DbConfig config = DbAutoConfigResolver.resolve(connectionName);
+
+        try {
+            Class.forName(config.getDriver());
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException("DB driver not found: " + config.getDriver(), e);
+        }
+
+        System.out.println("[DB] connectionName=" + connectionName);
+        System.out.println("[DB] source=" + config.getSource());
+        System.out.println("[DB] driver=" + config.getDriver());
+        System.out.println("[DB] mode=" + (config.hasSqlAuth() ? "SQL_AUTH" : "WINDOWS_AUTH"));
+        System.out.println("[DB] url=" + mask(config.getUrl()));
+
+        if (config.hasSqlAuth()) {
+            return DriverManager.getConnection(
+                    config.getUrl(),
+                    config.getUsername(),
+                    config.getPassword()
+            );
+        }
+
+        return DriverManager.getConnection(config.getUrl());
     }
 
-    public DbConfig(String driver, String url, String username, String password, String source) {
-        this.driver = driver;
-        this.url = url;
-        this.username = username;
-        this.password = password;
-        this.source = source;
-    }
-
-    public String getDriver() {
-        return driver;
-    }
-
-    public String getUrl() {
-        return url;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public String getSource() {
-        return source;
-    }
-
-    public boolean hasSqlAuth() {
-        return username != null && !username.trim().isEmpty()
-                && password != null && !password.trim().isEmpty();
+    private static String mask(String url) {
+        return url == null ? null : url.replaceAll("(?i)(password=)([^;]+)", "$1****");
     }
 }
