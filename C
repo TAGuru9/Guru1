@@ -1,12 +1,17 @@
 package com.acfc.automation.context;
 
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.Map;
 
 public class ScenarioContext {
 
     private static final ThreadLocal<Map<String, String>> CONTEXT =
-            ThreadLocal.withInitial(LinkedHashMap::new);
+            new ThreadLocal<Map<String, String>>() {
+                @Override
+                protected Map<String, String> initialValue() {
+                    return new HashMap<String, String>();
+                }
+            };
 
     private ScenarioContext() {
     }
