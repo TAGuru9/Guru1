@@ -1,37 +1,36 @@
-package com.acfc.automation.util;
+package com.acfc.automation.db;
 
 import com.acfc.automation.context.ScenarioContext;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.sql.Connection;
+import java.util.Map;
 
-public class VariableResolver {
+public class DbStepExecutor {
 
-    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{([^}]+)}");
-
-    private VariableResolver() {
+    private DbStepExecutor() {
     }
 
-    public static String resolve(String input) {
-        if (input == null || input.isEmpty()) {
-            return input;
+    public static void executeAndStore(DbConfig dbConfig, String sql) {
+        if (dbConfig == null) {
+            throw new IllegalArgumentException("DbConfig cannot be null");
+        }
+        if (sql == null || sql.trim().isEmpty()) {
+            throw new IllegalArgumentException("SQL cannot be null or empty");
         }
 
-        Matcher matcher = PLACEHOLDER_PATTERN.matcher(input);
-        StringBuffer resolved = new StringBuffer();
+        try (Connection connection = DbConnectionManager.getConnection(dbConfig)) {
+            System.out.println("[DB] Executing query:");
+            System.out.println(sql);
 
-        while (matcher.find()) {
-            String key = matcher.group(1);
-            String value = ScenarioContext.get(key);
+            Map<String, String> firstRow = DbQueryUtil.executeQueryAndGetFirstRow(connection, sql);
 
-            if (value == null) {
-                throw new RuntimeException("No variable found for placeholder: ${" + key + "}");
+            for (Map.Entry<String, String> entry : firstRow.entrySet()) {
+                ScenarioContext.set(entry.getKey(), entry.getValue());
+                System.out.println("[DB->VAR] " + entry.getKey() + " = " + entry.getValue());
             }
 
-            matcher.appendReplacement(resolved, Matcher.quoteReplacement(value));
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to execute DB step and store variables", e);
         }
-
-        matcher.appendTail(resolved);
-        return resolved.toString();
     }
 }
