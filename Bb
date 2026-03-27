@@ -34,8 +34,8 @@ public class ApiValidator {
         String responseBody = response.getBody() == null ? "" : response.getBody().asString();
 
         if (testCase.getExpectedBodyContains() != null) {
-            for (String expectedContains : testCase.getExpectedBodyContains()) {
-                String expected = replaceContextValues(expectedContains);
+            for (String item : testCase.getExpectedBodyContains()) {
+                String expected = replaceContextValues(item);
                 boolean matched = responseBody.contains(expected);
 
                 details.add(new ValidationDetail(
@@ -47,6 +47,8 @@ public class ApiValidator {
                 ));
             }
         }
+
+        boolean noResults = responseBody.contains("No Results");
 
         if (testCase.getExpectedBodyXpaths() != null && !testCase.getExpectedBodyXpaths().isEmpty()) {
             try {
@@ -63,13 +65,23 @@ public class ApiValidator {
                     String expected = replaceContextValues(entry.getValue());
                     String actual = xpath.evaluate(xpathExpr, doc);
 
-                    details.add(new ValidationDetail(
-                            "XPATH",
-                            xpathExpr,
-                            expected,
-                            actual,
-                            safe(expected).equals(safe(actual)) ? "PASS" : "FAIL"
-                    ));
+                    if (noResults) {
+                        details.add(new ValidationDetail(
+                                "XPATH",
+                                xpathExpr,
+                                expected,
+                                "No Results",
+                                "FAIL"
+                        ));
+                    } else {
+                        details.add(new ValidationDetail(
+                                "XPATH",
+                                xpathExpr,
+                                expected,
+                                actual,
+                                safe(expected).equals(safe(actual)) ? "PASS" : "FAIL"
+                        ));
+                    }
                 }
             } catch (Exception e) {
                 details.add(new ValidationDetail(
@@ -106,8 +118,8 @@ public class ApiValidator {
             }
 
             String key = resolved.substring(start + 2, end).trim();
-            Object contextValue = ExecutionContext.get(key);
-            String value = contextValue == null ? null : contextValue.toString();
+            Object valueObj = ExecutionContext.get(key);
+            String value = valueObj == null ? null : valueObj.toString();
 
             if (value != null) {
                 resolved = resolved.substring(0, start) + value + resolved.substring(end + 1);
