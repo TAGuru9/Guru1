@@ -1,0 +1,572 @@
+package com.acfc.automation.engine;
+
+import com.acfc.automation.config.FrameworkConfig;
+import com.acfc.automation.context.ExecutionContext;
+import com.acfc.automation.db.DbQueryExecutor;
+import com.acfc.automation.db.DbQueryResult;
+import com.acfc.automation.model.DbQuery;
+import com.acfc.automation.model.ExecutionResult;
+import com.acfc.automation.model.ExtractionRule;
+import com.acfc.automation.model.TestCase;
+import com.acfc.automation.model.ValidationDetail;
+import com.acfc.automation.report.ExtentReportManager;
+import com.aventstack.extentreports.ExtentTest;
+import io.restassured.RestAssured;
+import io.restassured.response.Response;
+import io.restassured.specification.RequestSpecification;
+import org.w3c.dom.Document;
+
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathFactory;
+import java.io.StringReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+
+public class ApiExecutionEngine {
+
+    private final ApiValidator validator = new ApiValidator();
+
+    public ExecutionResult execute(TestCase testCase) {
+        long startTime = System.currentTimeMillis();
+
+        String tcName = safe(testCase.getId()) + " - " + safe(testCase.getName());
+
+        ExtentTest extentTest = ExtentReportManager.get()
+                .createTest(tcName)
+                .assignCategory(
+                        safe(testCase.getType()),
+                        safe(testCase.getSuite())
+                );
+
+        int expectedStatus = testCase.getExpectedStatus() == null ? 200 : testCase.getExpectedStatus();
+        int actualStatus = 0;
+        String finalStatus = "FAIL";
+
+        try {
+            String baseUrl = FrameworkConfig.getProperty(testCase.getBaseUrlProperty());
+            String url = safe(baseUrl) + safe(testCase.getEndpoint());
+
+            System.out.println("======================================================");
+            System.out.println("Project: " + testCase.getProject());
+            System.out.println("TC ID: " + testCase.getId());
+            System.out.println("Base URL Property: " + testCase.getBaseUrlProperty());
+            System.out.println("Resolved Base URL: " + baseUrl);
+            System.out.println("Endpoint: " + safe(testCase.getEndpoint()));
+            System.out.println("Final URL: " + url);
+            System.out.println("Method: " + testCase.getMethod());
+            System.out.println("Headers from test case: " + testCase.getHeaders());
+            System.out.println("======================================================");
+
+            extentTest.info("Project: " + testCase.getProject());
+            extentTest.info("Method: " + testCase.getMethod());
+            extentTest.info("Final URL: " + url);
+
+            RequestSpecification request = RestAssured
+                    .given()
+                    .relaxedHTTPSValidation();
+
+            Map<String, String> resolvedHeaders = testCase.getHeaders();
+            if (resolvedHeaders != null && !resolvedHeaders.isEmpty()) {
+                request.headers(resolvedHeaders);
+                extentTest.info("Headers: " + resolvedHeaders);
+            }
+
+            System.out.println("Resolved Headers: " + resolvedHeaders);
+
+            // --------------------------------------------------
+            // STEP 1: PRE-API DB QUERY (for payload-driven DB values)
+            // --------------------------------------------------
+            System.out.println("STEP 1 - Before preApiDbQuery");
+            preApiDbQuery(testCase, extentTest);
+            System.out.println("STEP 2 - After preApiDbQuery");
+
+            // --------------------------------------------------
+            // STEP 2: BUILD REQUEST BODY
+            // --------------------------------------------------
+            String requestBody = null;
+
+            if (testCase.getPayloadFile() != null && !testCase.getPayloadFile().isBlank()) {
+                System.out.println("STEP 3 - Before load payload");
+                Path payloadPath = FrameworkConfig.getTestResourceDir()
+                        .resolve(testCase.getPayloadFile());
+
+                requestBody = Files.readString(payloadPath);
+
+                requestBody = applyPayloadData(requestBody, testCase.getPayloadData());
+                requestBody = replaceContextValues(requestBody);
+                requestBody = resolveInlineProperties(requestBody);
+
+                System.out.println("STEP 4 - After load payload");
+                System.out.println("Payload File: " + payloadPath);
+                System.out.println("Payload Data: " + testCase.getPayloadData());
+                System.out.println("Request Body:");
+                System.out.println(requestBody);
+
+                request.body(requestBody);
+
+                extentTest.info("Request Body:");
+                extentTest.info("<pre>" + escapeHtml(requestBody) + "</pre>");
+            }
+
+            // --------------------------------------------------
+            // STEP 3: EXECUTE API
+            // --------------------------------------------------
+            System.out.println("STEP 5 - Before executeRequest");
+            Response response = executeRequest(request, testCase.getMethod(), url);
+            System.out.println("STEP 6 - After executeRequest");
+
+            actualStatus = response.getStatusCode();
+
+            System.out.println("Actual Status Code: " + actualStatus);
+            System.out.println("Response Body:");
+            System.out.println(response.getBody().asString());
+
+            extentTest.info("Actual Status Code: " + actualStatus);
+            extentTest.info("Response Body:");
+            extentTest.info("<pre>" + escapeHtml(response.getBody().asString()) + "</pre>");
+
+            // --------------------------------------------------
+            // STEP 4: VALIDATE API RESPONSE
+            // --------------------------------------------------
+            ApiValidator.ValidationOutcome outcome = validator.validate(testCase, response);
+
+            System.out.println("Validator passed? " + outcome.passed());
+
+            finalStatus = outcome.passed() ? "PASS" : "FAIL";
+
+            ExecutionResult result = new ExecutionResult(
+                    testCase.getProject(),
+                    testCase.getId(),
+                    testCase.getName(),
+                    testCase.getMethod(),
+                    testCase.getType(),
+                    testCase.getSuite(),
+                    expectedStatus,
+                    actualStatus,
+                    finalStatus,
+                    System.currentTimeMillis() - startTime
+            );
+
+            result.getValidationDetails().addAll(outcome.details());
+
+            for (ValidationDetail detail : outcome.details()) {
+                String message = "Type: " + safe(detail.getType())
+                        + " | Field: " + safe(detail.getField())
+                        + " | Expected: " + safe(detail.getExpected())
+                        + " | Actual: " + safe(detail.getActual());
+
+                if ("PASS".equalsIgnoreCase(detail.getStatus())) {
+                    extentTest.pass(message);
+                } else {
+                    extentTest.fail(message);
+                }
+            }
+
+            // --------------------------------------------------
+            // STEP 5: EXTRACT VALUES FROM RESPONSE
+            // --------------------------------------------------
+            applyExtractions(testCase, response, result, extentTest);
+
+            // --------------------------------------------------
+            // STEP 6: POST-API DB VALIDATION
+            // --------------------------------------------------
+            System.out.println("STEP 7 - Before postApiDbValidation");
+            postApiDbValidation(testCase, response, result, extentTest);
+            System.out.println("STEP 8 - After postApiDbValidation");
+
+            System.out.println("-----------------------------------------------");
+            for (ValidationDetail detail : result.getValidationDetails()) {
+                System.out.printf(
+                        "%-14s | Field: %-80s | Expected: %-25s | Actual: %-25s | %s%n",
+                        safe(detail.getType()),
+                        safe(detail.getField()),
+                        safe(detail.getExpected()),
+                        safe(detail.getActual()),
+                        safe(detail.getStatus())
+                );
+            }
+            System.out.println("-----------------------------------------------");
+            System.out.println("ExecutionResult status: " + result.getStatus());
+
+            if ("PASS".equalsIgnoreCase(result.getStatus())) {
+                extentTest.pass("Final Result: PASS");
+            } else {
+                extentTest.fail("Final Result: FAIL");
+            }
+
+            return result;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            extentTest.fail(e);
+
+            return new ExecutionResult(
+                    testCase.getProject(),
+                    testCase.getId(),
+                    testCase.getName(),
+                    testCase.getMethod(),
+                    testCase.getType(),
+                    testCase.getSuite(),
+                    expectedStatus,
+                    actualStatus,
+                    "FAIL",
+                    System.currentTimeMillis() - startTime
+            );
+        } finally {
+            ExtentReportManager.flush();
+        }
+    }
+
+    // ============================================================
+    // REQUEST EXECUTION
+    // ============================================================
+
+    private Response executeRequest(RequestSpecification request, String method, String url) {
+        if (method == null || method.isBlank()) {
+            throw new IllegalArgumentException("HTTP method cannot be null or blank");
+        }
+
+        switch (method.trim().toUpperCase()) {
+            case "GET":
+                return request.when().get(url);
+            case "POST":
+                return request.when().post(url);
+            case "PUT":
+                return request.when().put(url);
+            case "PATCH":
+                return request.when().patch(url);
+            case "DELETE":
+                return request.when().delete(url);
+            case "OPTIONS":
+                return request.when().options(url);
+            case "HEAD":
+                return request.when().head(url);
+            default:
+                throw new IllegalArgumentException("Unsupported method: " + method);
+        }
+    }
+
+    // ============================================================
+    // PRE-API DB QUERY
+    // ============================================================
+
+    private void preApiDbQuery(TestCase testCase, ExtentTest extentTest) {
+        if (testCase.getDbQuery() == null) {
+            return;
+        }
+
+        DbQuery dbQuery = testCase.getDbQuery();
+
+        // Only run this stage when DB query is meant to fetch/store data
+        if (dbQuery.storeColumnsAs == null || dbQuery.storeColumnsAs.isEmpty()) {
+            return;
+        }
+
+        try {
+            String sql = resolveInlineProperties(dbQuery.sql);
+            sql = replaceContextValues(sql);
+
+            System.out.println("DB PRE - Connection: " + dbQuery.connection);
+            System.out.println("DB PRE - SQL: " + sql);
+
+            extentTest.info("DB PRE Connection: " + dbQuery.connection);
+            extentTest.info("DB PRE SQL: " + sql);
+
+            DbQueryResult dbResult = DbQueryExecutor.execute(dbQuery.connection, sql);
+
+            System.out.println("DB PRE - ResultObject: " + dbResult);
+
+            if (dbResult == null || dbResult.rows == null || dbResult.rows.isEmpty()) {
+                extentTest.fail("DB PRE query returned no rows");
+                return;
+            }
+
+            Map<String, Object> firstRow = dbResult.rows.get(0);
+
+            for (Map.Entry<String, String> entry : dbQuery.storeColumnsAs.entrySet()) {
+                String dbColumn = entry.getKey();
+                String contextKey = entry.getValue();
+
+                Object value = firstRow.get(dbColumn);
+
+                if (value == null) {
+                    for (Map.Entry<String, Object> rowEntry : firstRow.entrySet()) {
+                        if (rowEntry.getKey().equalsIgnoreCase(dbColumn)) {
+                            value = rowEntry.getValue();
+                            break;
+                        }
+                    }
+                }
+
+                String finalValue = value == null ? "" : value.toString();
+
+                ExecutionContext.put(contextKey, finalValue);
+
+                System.out.println("Stored in context: " + contextKey + " = " + finalValue);
+                extentTest.info("Stored in context: " + contextKey + " = " + finalValue);
+            }
+
+            extentTest.pass("DB PRE query executed successfully");
+
+        } catch (Exception e) {
+            extentTest.fail("DB PRE query failed: " + e.getMessage());
+            throw new RuntimeException("DB PRE query failed", e);
+        }
+    }
+
+    // ============================================================
+    // POST-API DB VALIDATION
+    // ============================================================
+
+    private void postApiDbValidation(TestCase testCase,
+                                     Response response,
+                                     ExecutionResult result,
+                                     ExtentTest extentTest) {
+        if (testCase.getDbQuery() == null) {
+            return;
+        }
+
+        DbQuery dbQuery = testCase.getDbQuery();
+
+        // Only run compare stage when compareColumn and response xpath/jsonpath are provided
+        if ((dbQuery.compareColumn == null || dbQuery.compareColumn.isBlank())
+                && (dbQuery.expectedResponseXPath == null || dbQuery.expectedResponseXPath.isBlank())
+                && (dbQuery.expectedResponseJsonPath == null || dbQuery.expectedResponseJsonPath.isBlank())) {
+            return;
+        }
+
+        try {
+            String sql = resolveInlineProperties(dbQuery.sql);
+            sql = replaceContextValues(sql);
+
+            DbQueryResult dbResult = DbQueryExecutor.execute(dbQuery.connection, sql);
+
+            String dbValue = null;
+
+            System.out.println("DB POST - Connection: " + dbQuery.connection);
+            System.out.println("DB POST - SQL: " + sql);
+            System.out.println("DB POST - ResultObject: " + dbResult);
+
+            if (dbResult != null && dbResult.rows != null && !dbResult.rows.isEmpty()) {
+                Map<String, Object> firstRow = dbResult.rows.get(0);
+
+                if (dbQuery.compareColumn != null && !dbQuery.compareColumn.isBlank()) {
+                    Object value = firstRow.get(dbQuery.compareColumn);
+
+                    if (value == null) {
+                        for (Map.Entry<String, Object> rowEntry : firstRow.entrySet()) {
+                            if (rowEntry.getKey().equalsIgnoreCase(dbQuery.compareColumn)) {
+                                value = rowEntry.getValue();
+                                break;
+                            }
+                        }
+                    }
+
+                    dbValue = value == null ? null : value.toString();
+                }
+            }
+
+            String apiValue = null;
+            String responseBody = response.getBody().asString();
+
+            if (dbQuery.expectedResponseXPath != null && !dbQuery.expectedResponseXPath.isBlank()) {
+                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                factory.setNamespaceAware(false);
+
+                Document doc = factory.newDocumentBuilder()
+                        .parse(new org.xml.sax.InputSource(new StringReader(responseBody)));
+
+                XPath xpath = XPathFactory.newInstance().newXPath();
+                apiValue = xpath.evaluate(dbQuery.expectedResponseXPath, doc);
+            }
+
+            String summary = "DB Validation | API: " + apiValue + " | DB: " + dbValue;
+            System.out.println(summary);
+            extentTest.info(summary);
+
+            if (safe(apiValue).equals(safe(dbValue))) {
+                extentTest.pass("DB Validation Passed");
+                result.getValidationDetails().add(new ValidationDetail(
+                        "DB",
+                        dbQuery.compareColumn,
+                        dbValue,
+                        apiValue,
+                        "PASS"
+                ));
+            } else {
+                extentTest.fail("DB Validation Failed");
+                result.getValidationDetails().add(new ValidationDetail(
+                        "DB",
+                        dbQuery.compareColumn,
+                        dbValue,
+                        apiValue,
+                        "FAIL"
+                ));
+            }
+
+        } catch (Exception e) {
+            extentTest.fail("DB Validation Error: " + e.getMessage());
+            result.getValidationDetails().add(new ValidationDetail(
+                    "DB",
+                    safe(testCase.getDbQuery().compareColumn),
+                    "N/A",
+                    "N/A",
+                    "FAIL"
+            ));
+        }
+    }
+
+    // ============================================================
+    // EXTRACTIONS
+    // ============================================================
+
+    private void applyExtractions(TestCase testCase,
+                                  Response response,
+                                  ExecutionResult result,
+                                  ExtentTest extentTest) {
+        List<ExtractionRule> extractions = testCase.getExtractions();
+        if (extractions == null || extractions.isEmpty()) {
+            return;
+        }
+
+        String responseBody = response.getBody() == null ? "" : response.getBody().asString();
+        boolean looksLikeXml = responseBody.trim().startsWith("<");
+
+        for (ExtractionRule ex : extractions) {
+            if (ex == null || ex.getKey() == null) {
+                continue;
+            }
+
+            Object value = null;
+
+            try {
+                if (ex.getJsonPath() != null && !ex.getJsonPath().isBlank()) {
+                    value = response.jsonPath().get(ex.getJsonPath());
+                } else if (looksLikeXml && ex.getXpath() != null && !ex.getXpath().isBlank()) {
+                    DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                    factory.setNamespaceAware(false);
+
+                    Document doc = factory.newDocumentBuilder()
+                            .parse(new org.xml.sax.InputSource(new StringReader(responseBody)));
+
+                    XPath xpath = XPathFactory.newInstance().newXPath();
+                    value = xpath.evaluate(ex.getXpath(), doc);
+                }
+            } catch (Exception ignored) {
+            }
+
+            String finalValue = value == null ? "" : value.toString();
+
+            result.getExtractedValues().put(ex.getKey(), finalValue);
+            ExecutionContext.put(ex.getKey(), finalValue);
+
+            System.out.println("Extracted: " + ex.getKey() + " = " + finalValue);
+            extentTest.info("Extracted: " + ex.getKey() + " = " + finalValue);
+        }
+    }
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
+
+    private String applyPayloadData(String template, Map<String, String> payloadData) {
+        if (template == null || payloadData == null || payloadData.isEmpty()) {
+            return template;
+        }
+
+        String resolved = template;
+
+        for (Map.Entry<String, String> entry : payloadData.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue() == null ? "" : entry.getValue();
+            resolved = resolved.replace("${" + key + "}", value);
+        }
+
+        return resolved;
+    }
+
+    private String replaceContextValues(String text) {
+        if (text == null || text.isBlank()) {
+            return text;
+        }
+
+        String resolved = text;
+        int guard = 0;
+
+        while (guard < 200) {
+            int start = resolved.indexOf("${");
+            if (start < 0) {
+                break;
+            }
+
+            int end = resolved.indexOf("}", start);
+            if (end < 0) {
+                break;
+            }
+
+            String key = resolved.substring(start + 2, end).trim();
+            String value = ExecutionContext.get(key);
+
+            if (value != null) {
+                resolved = resolved.substring(0, start) + value + resolved.substring(end + 1);
+            } else {
+                break;
+            }
+
+            guard++;
+        }
+
+        return resolved;
+    }
+
+    private String resolveInlineProperties(String text) {
+        if (text == null || text.isBlank()) {
+            return text;
+        }
+
+        String resolved = text;
+        int guard = 0;
+
+        while (guard < 200) {
+            int start = resolved.indexOf("${");
+            if (start < 0) {
+                break;
+            }
+
+            int end = resolved.indexOf("}", start);
+            if (end < 0) {
+                break;
+            }
+
+            String key = resolved.substring(start + 2, end).trim();
+            String value = FrameworkConfig.getProperty(key);
+
+            if (value != null) {
+                resolved = resolved.substring(0, start) + value + resolved.substring(end + 1);
+            } else {
+                break;
+            }
+
+            guard++;
+        }
+
+        return resolved;
+    }
+
+    private String escapeHtml(String text) {
+        if (text == null) {
+            return "";
+        }
+
+        return text.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;");
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
+    }
+}
