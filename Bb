@@ -1,0 +1,129 @@
+package com.acfc.automation.engine;
+
+import com.acfc.automation.context.ExecutionContext;
+import com.acfc.automation.model.TestCase;
+import com.acfc.automation.model.ValidationDetail;
+import io.restassured.response.Response;
+import org.w3c.dom.Document;
+import org.xml.sax.InputSource;
+
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathFactory;
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+public class ApiValidator {
+
+    public ValidationOutcome validate(TestCase testCase, Response response) {
+        List<ValidationDetail> details = new ArrayList<>();
+
+        int actualStatus = response.getStatusCode();
+        int expectedStatus = testCase.getExpectedStatus() == null ? 200 : testCase.getExpectedStatus();
+
+        details.add(new ValidationDetail(
+                "STATUS",
+                "statusCode",
+                String.valueOf(expectedStatus),
+                String.valueOf(actualStatus),
+                expectedStatus == actualStatus ? "PASS" : "FAIL"
+        ));
+
+        String responseBody = response.getBody() == null ? "" : response.getBody().asString();
+
+        if (testCase.getExpectedBodyContains() != null) {
+            for (String expectedContains : testCase.getExpectedBodyContains()) {
+                String expected = replaceContextValues(expectedContains);
+                boolean matched = responseBody.contains(expected);
+
+                details.add(new ValidationDetail(
+                        "BODY_CONTAINS",
+                        "contains",
+                        expected,
+                        matched ? expected : responseBody,
+                        matched ? "PASS" : "FAIL"
+                ));
+            }
+        }
+
+        if (testCase.getExpectedBodyXpaths() != null && !testCase.getExpectedBodyXpaths().isEmpty()) {
+            try {
+                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                factory.setNamespaceAware(false);
+
+                Document doc = factory.newDocumentBuilder()
+                        .parse(new InputSource(new StringReader(responseBody)));
+
+                XPath xpath = XPathFactory.newInstance().newXPath();
+
+                for (Map.Entry<String, String> entry : testCase.getExpectedBodyXpaths().entrySet()) {
+                    String xpathExpr = entry.getKey();
+                    String expected = replaceContextValues(entry.getValue());
+                    String actual = xpath.evaluate(xpathExpr, doc);
+
+                    details.add(new ValidationDetail(
+                            "XPATH",
+                            xpathExpr,
+                            expected,
+                            actual,
+                            safe(expected).equals(safe(actual)) ? "PASS" : "FAIL"
+                    ));
+                }
+            } catch (Exception e) {
+                details.add(new ValidationDetail(
+                        "XPATH",
+                        "xpath-validation",
+                        "valid xpath response",
+                        e.getMessage(),
+                        "FAIL"
+                ));
+            }
+        }
+
+        boolean passed = details.stream().allMatch(d -> "PASS".equalsIgnoreCase(d.getStatus()));
+        return new ValidationOutcome(passed, details);
+    }
+
+    private String replaceContextValues(String text) {
+        if (text == null || text.isBlank()) {
+            return text;
+        }
+
+        String resolved = text;
+        int guard = 0;
+
+        while (guard < 200) {
+            int start = resolved.indexOf("${");
+            if (start < 0) {
+                break;
+            }
+
+            int end = resolved.indexOf("}", start);
+            if (end < 0) {
+                break;
+            }
+
+            String key = resolved.substring(start + 2, end).trim();
+            Object contextValue = ExecutionContext.get(key);
+            String value = contextValue == null ? null : contextValue.toString();
+
+            if (value != null) {
+                resolved = resolved.substring(0, start) + value + resolved.substring(end + 1);
+            } else {
+                break;
+            }
+
+            guard++;
+        }
+
+        return resolved;
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
+    }
+
+    public record ValidationOutcome(boolean passed, List<ValidationDetail> details) {}
+}
