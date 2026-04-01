@@ -1,14 +1,67 @@
-private String normalize(String value) {
-    if (value == null) {
-        return "";
+package com.acfc.automation.util;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
+
+public class TestDataReader {
+
+    public static List<Map<String, String>> readData(String filePath, String delimiter) throws IOException {
+        String fileType = getFileType(filePath);
+
+        if ("csv".equalsIgnoreCase(fileType)) {
+            return readDelimitedFile(filePath, ",");
+        } else if ("txt".equalsIgnoreCase(fileType)) {
+            String actualDelimiter = (delimiter == null || delimiter.isBlank()) ? "|" : delimiter;
+            return readDelimitedFile(filePath, actualDelimiter);
+        } else {
+            throw new IllegalArgumentException("Unsupported file type: " + fileType);
+        }
     }
 
-    return value
-            .replace('\u00A0', ' ')
-            .replaceAll("[\\u200B-\\u200D\\uFEFF]", "")
-            .replaceAll("[\\u0000-\\u001F\\u007F]", "")
-            .replaceAll("[\\t\\n\\r]+", "")
-            .replaceAll("\\s+", " ")
-            .trim()
-            .toLowerCase();
+    private static String getFileType(String filePath) {
+        if (filePath == null || !filePath.contains(".")) {
+            throw new IllegalArgumentException("Invalid file path: " + filePath);
+        }
+        return filePath.substring(filePath.lastIndexOf('.') + 1).toLowerCase();
+    }
+
+    private static List<Map<String, String>> readDelimitedFile(String filePath, String delimiter) throws IOException {
+        List<Map<String, String>> records = new ArrayList<>();
+
+        try (BufferedReader br = Files.newBufferedReader(Paths.get(filePath))) {
+            String headerLine = br.readLine();
+            if (headerLine == null || headerLine.isBlank()) {
+                return records;
+            }
+
+            String[] headers = headerLine.split(Pattern.quote(delimiter), -1);
+
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (line.isBlank()) {
+                    continue;
+                }
+
+                String[] values = line.split(Pattern.quote(delimiter), -1);
+                Map<String, String> row = new LinkedHashMap<>();
+
+                for (int i = 0; i < headers.length; i++) {
+                    String key = headers[i].trim();
+                    String value = i < values.length ? values[i].trim() : "";
+                    row.put(key, value);
+                }
+
+                records.add(row);
+            }
+        }
+
+        return records;
+    }
 }
