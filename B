@@ -6,7 +6,7 @@ public class DBQuery {
 
     private String connection;
     private String sql;
-
+    private Map<String, String> params;
     private Map<String, String> storeColumnsAs;
 
     private String compareColumn;
@@ -19,6 +19,10 @@ public class DBQuery {
 
     public String getSql() {
         return sql;
+    }
+
+    public Map<String, String> getParams() {
+        return params;
     }
 
     public Map<String, String> getStoreColumnsAs() {
