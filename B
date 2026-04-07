@@ -1,41 +1,186 @@
-@TestFactory
-public List<DynamicTest> execution() throws Exception {
-    SummaryTracker.startSuite();
-    ExecutionResultStore.clear();
+package com.acfc.automation.runner;
 
-    List<TestCase> allCases = TestCaseLoader.loadAll();
-    List<TestCase> selectedCases = selectCases(allCases);
+import com.acfc.automation.config.FrameworkConfig;
+import com.acfc.automation.context.ExecutionContext;
+import com.acfc.automation.data.TestCaseLoader;
+import com.acfc.automation.engine.ApiExecutionEngine;
+import com.acfc.automation.model.ExecutionResult;
+import com.acfc.automation.model.TestCase;
+import com.acfc.automation.report.ExecutionResultStore;
+import com.acfc.automation.report.ExtentReportManager;
+import com.acfc.automation.report.summary.SummaryTracker;
+import com.acfc.automation.util.TestDataReader;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.DynamicTest;
+import org.junit.jupiter.api.TestFactory;
 
-    if (selectedCases.isEmpty()) {
-        throw new IllegalArgumentException("No matching test cases found");
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+public abstract class ConfigDrivenApiRunner {
+
+    private static final ApiExecutionEngine engine = new ApiExecutionEngine();
+
+    protected String project() {
+        return System.getProperty("project", FrameworkConfig.projectName());
     }
 
-    List<DynamicTest> tests = new ArrayList<>();
+    protected String suite() {
+        return System.getProperty("suite", "");
+    }
 
-    for (TestCase testCase : selectedCases) {
-        String dataFile = resolveDataFile(testCase);
-        String delimiter = resolveDelimiter(testCase);
-        boolean loopEnabled = isLoopEnabled(testCase);
+    @TestFactory
+    public List<DynamicTest> execution() throws Exception {
+        SummaryTracker.startSuite();
+        ExecutionResultStore.clear();
 
-        if (loopEnabled && dataFile != null && !dataFile.isBlank()) {
-            List<Map<String, String>> records = TestDataReader.readData(dataFile, delimiter);
+        List<TestCase> allCases = TestCaseLoader.loadAll();
+        List<TestCase> selectedCases = selectCases(allCases);
 
-            for (int i = 0; i < records.size(); i++) {
-                int iteration = i + 1;
-                Map<String, String> record = records.get(i);
+        if (selectedCases.isEmpty()) {
+            throw new IllegalArgumentException("No matching test cases found");
+        }
 
+        List<DynamicTest> tests = new ArrayList<>();
+
+        for (TestCase testCase : selectedCases) {
+            boolean loopEnabled = isLoopEnabled(testCase);
+            String resolvedDataFile = resolveDataFile(testCase);
+            String resolvedDelimiter = resolveDelimiter(testCase);
+
+            if (loopEnabled && resolvedDataFile != null && !resolvedDataFile.isBlank()) {
+                List<Map<String, String>> records =
+                        TestDataReader.readData(resolvedDataFile, resolvedDelimiter);
+
+                if (records == null || records.isEmpty()) {
+                    tests.add(DynamicTest.dynamicTest(
+                            safe(testCase.getId()) + " - no loop data",
+                            () -> {
+                                throw new IllegalArgumentException(
+                                        "Loop is enabled but no records found in file: " + resolvedDataFile
+                                );
+                            }
+                    ));
+                    continue;
+                }
+
+                for (int i = 0; i < records.size(); i++) {
+                    final int iteration = i + 1;
+                    final Map<String, String> record = records.get(i);
+
+                    tests.add(DynamicTest.dynamicTest(
+                            safe(testCase.getId()) + " - Iteration " + iteration,
+                            () -> executeLoopIteration(testCase, record, iteration)
+                    ));
+                }
+            } else {
                 tests.add(DynamicTest.dynamicTest(
-                        testCase.getId() + " - Iteration " + iteration,
-                        () -> executeLoopIteration(testCase, record, iteration)
+                        safe(testCase.getId()) + " - " + safe(testCase.getName()),
+                        () -> executeSingle(testCase)
                 ));
             }
-        } else {
-            tests.add(DynamicTest.dynamicTest(
-                    safe(testCase.getId()) + " - " + safe(testCase.getName()),
-                    () -> executeSingle(testCase)
-            ));
         }
+
+        return tests;
     }
 
-    return tests;
+    private List<TestCase> selectCases(List<TestCase> allCases) {
+        String idsProp = System.getProperty("ids", "").trim();
+        String namesProp = System.getProperty("names", "").trim();
+
+        if (!idsProp.isBlank()) {
+            List<String> ids = Arrays.stream(idsProp.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isBlank())
+                    .collect(Collectors.toList());
+
+            return allCases.stream()
+                    .filter(tc -> tc != null && ids.contains(safe(tc.getId())))
+                    .collect(Collectors.toList());
+        }
+
+        if (!namesProp.isBlank()) {
+            List<String> names = Arrays.stream(namesProp.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isBlank())
+                    .collect(Collectors.toList());
+
+            return allCases.stream()
+                    .filter(tc -> tc != null && names.contains(safe(tc.getName())))
+                    .collect(Collectors.toList());
+        }
+
+        throw new IllegalArgumentException("Provide ids or names");
+    }
+
+    private String resolveDataFile(TestCase testCase) {
+        String overrideDataFile = System.getProperty("dataFile", "").trim();
+        if (!overrideDataFile.isBlank()) {
+            return overrideDataFile;
+        }
+        return testCase.getDataFile();
+    }
+
+    private String resolveDelimiter(TestCase testCase) {
+        String overrideDelimiter = System.getProperty("delimiter", "").trim();
+        if (!overrideDelimiter.isBlank()) {
+            return overrideDelimiter;
+        }
+
+        String tcDelimiter = testCase.getDelimiter();
+        return (tcDelimiter == null || tcDelimiter.isBlank()) ? "," : tcDelimiter;
+    }
+
+    private boolean isLoopEnabled(TestCase testCase) {
+        Object value = testCase.getLoopEnabled();
+        return value != null && "true".equalsIgnoreCase(String.valueOf(value).trim());
+    }
+
+    private void executeLoopIteration(TestCase testCase, Map<String, String> record, int iteration) {
+        ExecutionContext.clear();
+        ExecutionContext.put("iteration", String.valueOf(iteration));
+        record.forEach(ExecutionContext::put);
+
+        ExecutionResult result = engine.execute(testCase);
+        ExecutionResultStore.add(result);
+        SummaryTracker.addResult(result);
+
+        Assertions.assertEquals(
+                "PASS",
+                safe(result.getStatus()).toUpperCase(),
+                "Test failed for " + safe(testCase.getId()) + " iteration " + iteration
+        );
+    }
+
+    private void executeSingle(TestCase testCase) {
+        ExecutionContext.clear();
+
+        ExecutionResult result = engine.execute(testCase);
+        ExecutionResultStore.add(result);
+        SummaryTracker.addResult(result);
+
+        Assertions.assertEquals(
+                "PASS",
+                safe(result.getStatus()).toUpperCase(),
+                "Single test failed: " + safe(testCase.getId())
+        );
+    }
+
+    @AfterAll
+    public static void afterAll() {
+        SummaryTracker.endSuite();
+        SummaryTracker.printSummary(
+                System.getProperty("project", FrameworkConfig.projectName()),
+                System.getProperty("env", FrameworkConfig.env())
+        );
+        ExtentReportManager.flush();
+    }
+
+    private static String safe(String value) {
+        return value == null ? "" : value.trim();
+    }
 }
