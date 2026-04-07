@@ -1,63 +1,43 @@
-.map(tc -> DynamicTest.dynamicTest(tc.getId() + " - " + tc.getName(), () -> {
+plugins {
+    id 'java'
+}
 
-    if (tc.isLoopEnabled()) {
+dependencies {
+    implementation project(':core')
 
-        List<Map<String, String>> rows =
-                TestDataReader.read(tc.getDataFile(), tc.getDelimiter());
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+}
 
-        int rowIndex = 1;
+test {
+    useJUnitPlatform()
 
-        for (Map<String, String> row : rows) {
-
-            System.out.println("=====================================");
-            System.out.println("Executing Row: " + rowIndex);
-            System.out.println("Row Data: " + row);
-            System.out.println("=====================================");
-
-            // VERY IMPORTANT
-            ExecutionContext.clear();
-
-            // Put CSV values into context
-            row.forEach((k, v) -> {
-                ExecutionContext.put(k, v);
-            });
-
-            ExecutionResult result = engine.execute(tc);
-
-            ExecutionResultsStore.add(result);
-            SummaryTracker.addResult(result);
-
-            System.out.printf(
-                "| %-6s | %-6s | %-10s | %-10s | Exp:%3d | Act:%3d | %s%n",
-                safe(result.getStatus()),
-                safe(result.getMethod()),
-                safe(result.getType()),
-                safe(result.getSuite()),
-                result.getExpectedStatus(),
-                result.getActualStatus(),
-                safe(result.getName())
-            );
-
-            rowIndex++;
-        }
-
-    } else {
-
-        ExecutionResult result = engine.execute(tc);
-
-        ExecutionResultsStore.add(result);
-        SummaryTracker.addResult(result);
-
-        System.out.printf(
-            "| %-6s | %-6s | %-10s | %-10s | Exp:%3d | Act:%3d | %s%n",
-            safe(result.getStatus()),
-            safe(result.getMethod()),
-            safe(result.getType()),
-            safe(result.getSuite()),
-            result.getExpectedStatus(),
-            result.getActualStatus(),
-            safe(result.getName())
-        );
+    testLogging {
+        events 'passed', 'failed', 'skipped', 'standard_out', 'standard_error'
+        showStandardStreams = true
+        exceptionFormat 'full'
     }
 
-}))
+    afterSuite { desc, result ->
+        if (!desc.parent) {
+            println()
+            println '==================== TEST SUMMARY ===================='
+            println "Result  : ${result.resultType}"
+            println "Total   : ${result.testCount}"
+            println "Passed  : ${result.successfulTestCount}"
+            println "Failed  : ${result.failedTestCount}"
+            println "Skipped : ${result.skippedTestCount}"
+            println "JUnit Report : file:///${project.buildDir}/reports/tests/test/index.html"
+            println '====================================================='
+            println()
+        }
+    }
+
+    systemProperty 'db.customerdb.url', project.findProperty('db.customerdb.url') ?: ''
+    systemProperty 'db.customerdb.driver', project.findProperty('db.customerdb.driver') ?: ''
+    systemProperty 'db.customerdb.user', project.findProperty('db.customerdb.user') ?: ''
+    systemProperty 'db.customerdb.password', project.findProperty('db.customerdb.password') ?: ''
+    systemProperty 'db.sqlserver.server', project.findProperty('db.sqlserver.server') ?: ''
+    systemProperty 'db.sqlserver.instance', project.findProperty('db.sqlserver.instance') ?: ''
+    systemProperty 'db.sqlserver.database', project.findProperty('db.sqlserver.database') ?: ''
+}
