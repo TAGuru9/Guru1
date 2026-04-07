@@ -5,11 +5,14 @@ import com.aventstack.extentreports.ExtentReports;
 import com.aventstack.extentreports.ExtentTest;
 import com.aventstack.extentreports.reporter.ExtentSparkReporter;
 
+import java.awt.Desktop;
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.UUID;
 
 public class ExtentReportManager {
 
@@ -30,7 +33,9 @@ public class ExtentReportManager {
                 String timestamp = LocalDateTime.now()
                         .format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS"));
 
-                String fileName = project + "_" + suite + "_" + type + "_" + timestamp + ".html";
+                String unique = UUID.randomUUID().toString().substring(0, 8);
+
+                String fileName = project + "_" + suite + "_" + type + "_" + timestamp + "_" + unique + ".html";
 
                 Path reportDir = Paths.get("reports", project, suite, type);
                 Files.createDirectories(reportDir);
@@ -51,6 +56,7 @@ public class ExtentReportManager {
                 extent.setSystemInfo("Environment", System.getProperty("env", FrameworkConfig.env()));
 
                 System.out.println("Extent report path: " + reportFilePath);
+                System.out.println("Extent report link: file:///" + reportFilePath.replace("\\", "/"));
 
             } catch (Exception e) {
                 throw new RuntimeException("Failed to initialize extent report", e);
@@ -77,6 +83,16 @@ public class ExtentReportManager {
 
     public static String getReportFilePath() {
         return reportFilePath;
+    }
+
+    public static void openReport() {
+        try {
+            if (reportFilePath != null && !reportFilePath.isBlank()) {
+                Desktop.getDesktop().browse(new File(reportFilePath).toURI());
+            }
+        } catch (Exception e) {
+            System.out.println("Unable to open report automatically: " + e.getMessage());
+        }
     }
 
     private static String safe(String value) {
