@@ -1,43 +1,70 @@
-package com.acfc.automation.model;
+package com.acfc.automation.db;
 
+import com.acfc.automation.context.ExecutionContext;
+import com.acfc.automation.model.DBQuery;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSetMetaData;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
-public class DBQuery {
+public class DbClient {
 
-    private String connection;
-    private String sql;
-    private Map<String, String> params;
-    private Map<String, String> storeColumnsAs;
+    public Map<String, Object> executeSingleRow(DBQuery query, Map<String, Object> context) {
+        String prefix = "db." + query.getConnection() + ".";
 
-    private String compareColumn;
-    private String expectedResponseXPath;
-    private String expectedResponseJsonPath;
+        String url = System.getProperty(prefix + "url");
+        String user = System.getProperty(prefix + "user");
+        String password = System.getProperty(prefix + "password");
+        String driver = System.getProperty(prefix + "driver");
 
-    public String getConnection() {
-        return connection;
-    }
+        if (url == null || url.isBlank()) {
+            throw new IllegalArgumentException("Missing DB property: " + prefix + "url");
+        }
 
-    public String getSql() {
-        return sql;
-    }
+        try {
+            if (driver != null && !driver.isBlank()) {
+                Class.forName(driver);
+            }
 
-    public Map<String, String> getParams() {
-        return params;
-    }
+            try (Connection conn = DriverManager.getConnection(url, user, password);
+                 PreparedStatement st = conn.prepareStatement(query.getSql())) {
 
-    public Map<String, String> getStoreColumnsAs() {
-        return storeColumnsAs;
-    }
+                Map<String, String> params = query.getParams();
+                if (params != null && !params.isEmpty()) {
+                    int index = 1;
+                    for (Map.Entry<String, String> entry : params.entrySet()) {
+                        String value = entry.getValue();
+                        if (value != null && value.startsWith("${") && value.endsWith("}")) {
+                            String key = value.substring(2, value.length() - 1).trim();
+                            Object ctxVal = ExecutionContext.get(key);
+                            st.setObject(index++, ctxVal);
+                        } else {
+                            st.setObject(index++, value);
+                        }
+                    }
+                }
 
-    public String getCompareColumn() {
-        return compareColumn;
-    }
+                try (java.sql.ResultSet rs = st.executeQuery()) {
+                    if (!rs.next()) {
+                        return Collections.emptyMap();
+                    }
 
-    public String getExpectedResponseXPath() {
-        return expectedResponseXPath;
-    }
+                    ResultSetMetaData meta = rs.getMetaData();
+                    Map<String, Object> row = new LinkedHashMap<>();
 
-    public String getExpectedResponseJsonPath() {
-        return expectedResponseJsonPath;
+                    for (int i = 1; i <= meta.getColumnCount(); i++) {
+                        row.put(meta.getColumnLabel(i), rs.getObject(i));
+                    }
+
+                    return row;
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("DB query execution failed", e);
+        }
     }
 }
