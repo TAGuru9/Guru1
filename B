@@ -1,29 +1,102 @@
-package com.acfc.automation.report;
+package com.acfc.automation.model;
 
-import com.acfc.automation.model.ExecutionResult;
-
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
-public final class ExecutionResultStore {
+public class TestCase {
 
-    private static final List<ExecutionResult> RESULTS = new ArrayList<>();
+    private String id;
+    private String name;
+    private String type;
+    private String suite;
+    private String project;
+    private String method;
+    private String baseUrlProperty;
+    private String endpoint;
+    private Map<String, String> headers;
 
-    private ExecutionResultStore() {
+    private Object loopEnabled;
+    private String dataFile;
+    private String delimiter;
+
+    private String payloadFile;
+    private Integer expectedStatus;
+
+    private List<ExtractionRule> extractions;
+    private List<String> expectedBodyContains;
+    private Map<String, String> expectedBodyXpaths;
+
+    private DBQuery dbQuery;
+
+    public String getId() {
+        return id;
     }
 
-    public static void add(ExecutionResult result) {
-        if (result != null) {
-            RESULTS.add(result);
-        }
+    public String getName() {
+        return name;
     }
 
-    public static List<ExecutionResult> getAll() {
-        return Collections.unmodifiableList(RESULTS);
+    public String getType() {
+        return type;
     }
 
-    public static void clear() {
-        RESULTS.clear();
+    public String getSuite() {
+        return suite;
+    }
+
+    public String getProject() {
+        return project;
+    }
+
+    public String getMethod() {
+        return method;
+    }
+
+    public String getBaseUrlProperty() {
+        return baseUrlProperty;
+    }
+
+    public String getEndpoint() {
+        return endpoint;
+    }
+
+    public Map<String, String> getHeaders() {
+        return headers;
+    }
+
+    public Object getLoopEnabled() {
+        return loopEnabled;
+    }
+
+    public String getDataFile() {
+        return dataFile;
+    }
+
+    public String getDelimiter() {
+        return delimiter;
+    }
+
+    public String getPayloadFile() {
+        return payloadFile;
+    }
+
+    public Integer getExpectedStatus() {
+        return expectedStatus;
+    }
+
+    public List<ExtractionRule> getExtractions() {
+        return extractions;
+    }
+
+    public List<String> getExpectedBodyContains() {
+        return expectedBodyContains;
+    }
+
+    public Map<String, String> getExpectedBodyXpaths() {
+        return expectedBodyXpaths;
+    }
+
+    public DBQuery getDbQuery() {
+        return dbQuery;
     }
 }
