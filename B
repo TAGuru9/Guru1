@@ -1,64 +1,29 @@
-package com.acfc.automation.report.summary;
+package com.acfc.automation.report;
 
 import com.acfc.automation.model.ExecutionResult;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
-public class SummaryTracker {
+public final class ExecutionResultStore {
 
     private static final List<ExecutionResult> RESULTS = new ArrayList<>();
-    private static long suiteStartTimeMs = 0L;
-    private static long suiteEndTimeMs = 0L;
 
-    private static int total;
-    private static int passed;
-    private static int failed;
-
-    private SummaryTracker() {
+    private ExecutionResultStore() {
     }
 
-    public static synchronized void startSuite() {
-        total = 0;
-        passed = 0;
-        failed = 0;
-        RESULTS.clear();
-        suiteStartTimeMs = System.currentTimeMillis();
-        suiteEndTimeMs = 0L;
-    }
-
-    public static synchronized void addResult(ExecutionResult result) {
+    public static void add(ExecutionResult result) {
         if (result != null) {
             RESULTS.add(result);
-            total++;
-            if ("PASS".equalsIgnoreCase(result.getStatus())) {
-                passed++;
-            } else {
-                failed++;
-            }
         }
     }
 
-    public static synchronized void endSuite() {
-        suiteEndTimeMs = System.currentTimeMillis();
+    public static List<ExecutionResult> getAll() {
+        return Collections.unmodifiableList(RESULTS);
     }
 
-    public static synchronized void printSummary(String project, String environment) {
-        long duration = suiteEndTimeMs > 0 ? suiteEndTimeMs - suiteStartTimeMs : 0L;
-
-        System.out.println();
-        System.out.println("==================== TEST SUMMARY ====================");
-        System.out.println("Project      : " + safe(project));
-        System.out.println("Environment  : " + safe(environment));
-        System.out.println("Total        : " + total);
-        System.out.println("Passed       : " + passed);
-        System.out.println("Failed       : " + failed);
-        System.out.println("Duration(ms) : " + duration);
-        System.out.println("======================================================");
-        System.out.println();
-    }
-
-    private static String safe(String value) {
-        return value == null ? "" : value.trim();
+    public static void clear() {
+        RESULTS.clear();
     }
 }
