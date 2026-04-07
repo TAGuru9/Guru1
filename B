@@ -1,73 +1,95 @@
-package com.acfc.automation.data;
+package com.acfc.automation.util;
 
-import com.acfc.automation.model.TestCase;
-import com.acfc.automation.util.FileResolver;
-import com.acfc.automation.util.JacksonUtil;
+import com.fasterxml.jackson.core.type.TypeReference;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
 
-public class TestCaseLoader {
+public class TestDataReader {
 
-    private TestCaseLoader() {
+    private TestDataReader() {
     }
 
-    public static List<TestCase> parse(String filePath) {
-        try {
-            List<TestCase> cases = new ArrayList<>();
+    public static List<Map<String, String>> readData(String filePath, String delimiter) throws IOException {
+        Path resolvedPath = FileResolver.resolve(filePath);
+        String fileType = getFileType(resolvedPath.getFileName().toString());
 
-            Path path = FileResolver.resolve(filePath);
+        if ("csv".equalsIgnoreCase(fileType)) {
+            return readDelimitedFile(resolvedPath, ",");
+        } else if ("txt".equalsIgnoreCase(fileType)) {
+            String actualDelimiter = (delimiter == null || delimiter.isBlank()) ? "|" : delimiter;
+            return readDelimitedFile(resolvedPath, actualDelimiter);
+        } else if ("json".equalsIgnoreCase(fileType)) {
+            return readJsonFile(resolvedPath);
+        } else {
+            throw new IllegalArgumentException("Unsupported file type: " + fileType);
+        }
+    }
 
-            if (!Files.exists(path)) {
-                throw new RuntimeException("Test case file not found: " + path);
+    private static String getFileType(String filePath) {
+        int idx = filePath.lastIndexOf('.');
+        if (idx < 0 || idx == filePath.length() - 1) {
+            throw new IllegalArgumentException("Invalid file path: " + filePath);
+        }
+        return filePath.substring(idx + 1).toLowerCase();
+    }
+
+    private static List<Map<String, String>> readDelimitedFile(Path path, String delimiter) throws IOException {
+        List<Map<String, String>> records = new ArrayList<>();
+
+        try (BufferedReader br = Files.newBufferedReader(path)) {
+            String headerLine = br.readLine();
+            if (headerLine == null || headerLine.isBlank()) {
+                return records;
             }
 
-            TestCase testCase = JacksonUtil.mapper().readValue(path.toFile(), TestCase.class);
-            cases.add(testCase);
+            String[] headers = headerLine.split(Pattern.quote(delimiter), -1);
 
-            return cases;
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to parse test case file: " + filePath, e);
-        }
-    }
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
 
-    public static List<TestCase> loadAll() {
-        try {
-            List<TestCase> cases = new ArrayList<>();
+                String[] values = line.split(Pattern.quote(delimiter), -1);
+                Map<String, String> row = new LinkedHashMap<>();
 
-            Path dir = FileResolver.resolve("testcases");
+                for (int i = 0; i < headers.length; i++) {
+                    String key = headers[i].trim();
+                    String value = i < values.length ? values[i].trim() : "";
+                    row.put(key, value);
+                }
 
-            if (!Files.exists(dir)) {
-                return cases;
+                records.add(row);
             }
-
-            Files.walk(dir)
-                    .filter(p -> p.toString().endsWith(".json"))
-                    .sorted()
-                    .forEach(p -> {
-                        try {
-                            cases.add(JacksonUtil.mapper().readValue(p.toFile(), TestCase.class));
-                        } catch (Exception e) {
-                            throw new RuntimeException("Failed to load test case: " + p, e);
-                        }
-                    });
-
-            return cases;
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to load testcase files", e);
         }
+
+        return records;
     }
 
-    public static List<TestCase> loadByRuntimeInput() {
-        String tcFile = System.getProperty("tcFile", "").trim();
+    private static List<Map<String, String>> readJsonFile(Path path) throws IOException {
+        List<Map<String, Object>> raw = JacksonUtil.mapper().readValue(
+                path.toFile(),
+                new TypeReference<List<Map<String, Object>>>() {}
+        );
 
-        if (!tcFile.isBlank()) {
-            return parse(tcFile);
+        List<Map<String, String>> result = new ArrayList<>();
+
+        for (Map<String, Object> row : raw) {
+            Map<String, String> stringRow = new LinkedHashMap<>();
+            for (Map.Entry<String, Object> entry : row.entrySet()) {
+                stringRow.put(entry.getKey(), entry.getValue() == null ? "" : String.valueOf(entry.getValue()));
+            }
+            result.add(stringRow);
         }
 
-        return loadAll();
+        return result;
     }
 }
