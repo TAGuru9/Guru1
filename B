@@ -1,67 +1,69 @@
-package com.acfc.automation.data;
+package com.acfc.automation.util;
 
-import com.acfc.automation.config.FrameworkConfig;
-import com.acfc.automation.model.TestCase;
-import com.acfc.automation.util.JacksonUtil;
-
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
-public class TestCaseLoader {
+public class TestDataReader {
 
-    private TestCaseLoader() {
+    private TestDataReader() {
     }
 
-    public static List<TestCase> parse(String filePath) {
-        try {
-            List<TestCase> cases = new ArrayList<>();
+    public static List<Map<String, String>> readData(String filePath, String delimiter) throws IOException {
+        String fileType = getFileType(filePath);
 
-            Path path = FrameworkConfig.testResourcesDir().resolve(filePath);
-
-            if (!Files.exists(path)) {
-                throw new RuntimeException("Test case file not found: " + path);
-            }
-
-            TestCase testCase = JacksonUtil.mapper().readValue(path.toFile(), TestCase.class);
-            cases.add(testCase);
-
-            return cases;
-
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to parse test case file: " + filePath, e);
+        if ("csv".equalsIgnoreCase(fileType)) {
+            return readDelimitedFile(filePath, ",");
+        } else if ("txt".equalsIgnoreCase(fileType)) {
+            String actualDelimiter = (delimiter == null || delimiter.isBlank()) ? "|" : delimiter;
+            return readDelimitedFile(filePath, actualDelimiter);
+        } else {
+            throw new IllegalArgumentException("Unsupported file type: " + fileType);
         }
     }
 
-    public static List<TestCase> loadAll() {
-        try {
-            List<TestCase> cases = new ArrayList<>();
+    private static String getFileType(String filePath) {
+        if (filePath == null || !filePath.contains(".")) {
+            throw new IllegalArgumentException("Invalid file path: " + filePath);
+        }
+        return filePath.substring(filePath.lastIndexOf('.') + 1).toLowerCase();
+    }
 
-            Path dir = FrameworkConfig.testResourcesDir().resolve("testcases");
+    private static List<Map<String, String>> readDelimitedFile(String filePath, String delimiter) throws IOException {
+        List<Map<String, String>> records = new ArrayList<>();
 
-            if (!Files.exists(dir)) {
-                return cases;
+        try (BufferedReader br = Files.newBufferedReader(Paths.get(filePath))) {
+            String headerLine = br.readLine();
+            if (headerLine == null || headerLine.isBlank()) {
+                return records;
             }
 
-            Files.walk(dir)
-                    .filter(Files::isRegularFile)
-                    .filter(p -> p.toString().endsWith(".json"))
-                    .sorted()
-                    .forEach(p -> {
-                        try {
-                            TestCase testCase = JacksonUtil.mapper().readValue(p.toFile(), TestCase.class);
-                            cases.add(testCase);
-                        } catch (Exception e) {
-                            throw new RuntimeException("Failed to load test case: " + p, e);
-                        }
-                    });
+            String[] headers = headerLine.split(java.util.regex.Pattern.quote(delimiter), -1);
 
-            return cases;
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
 
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to load all test cases", e);
+                String[] values = line.split(java.util.regex.Pattern.quote(delimiter), -1);
+                Map<String, String> row = new LinkedHashMap<>();
+
+                for (int i = 0; i < headers.length; i++) {
+                    String key = headers[i].trim();
+                    String value = i < values.length ? values[i].trim() : "";
+                    row.put(key, value);
+                }
+
+                records.add(row);
+            }
         }
+
+        return records;
     }
 }
