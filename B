@@ -1,536 +1,64 @@
-package com.acfc.automation.engine;
+package com.acfc.automation.report.summary;
 
-import com.acfc.automation.config.FrameworkConfig;
-import com.acfc.automation.context.ExecutionContext;
-import com.acfc.automation.db.DBQueryExecutor;
-import com.acfc.automation.db.DBQueryResult;
-import com.acfc.automation.model.DBQuery;
 import com.acfc.automation.model.ExecutionResult;
-import com.acfc.automation.model.ExtractionRule;
-import com.acfc.automation.model.TestCase;
-import com.acfc.automation.model.ValidationDetail;
-import com.acfc.automation.report.ExtentReportManager;
-import com.aventstack.extentreports.ExtentTest;
-import io.restassured.RestAssured;
-import io.restassured.response.Response;
-import io.restassured.specification.RequestSpecification;
-import org.w3c.dom.Document;
-import org.xml.sax.InputSource;
 
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathFactory;
-import java.io.InputStream;
-import java.io.StringReader;
-import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 
-public class ApiExecutionEngine {
+public class SummaryTracker {
 
-    private final ApiValidator validator = new ApiValidator();
-    private String finalStatus = "PASS";
+    private static final List<ExecutionResult> RESULTS = new ArrayList<>();
+    private static long suiteStartTimeMs = 0L;
+    private static long suiteEndTimeMs = 0L;
 
-    public ExecutionResult execute(TestCase testCase) {
-        long startTime = System.currentTimeMillis();
+    private static int total;
+    private static int passed;
+    private static int failed;
 
-        String iteration = safe(ExecutionContext.getAsString("iteration"));
-        String subscriberId = safe(ExecutionContext.getAsString("subscriberID"));
+    private SummaryTracker() {
+    }
 
-        String tcName = safe(testCase.getId()) + " - " + safe(testCase.getName());
-        if (!iteration.isBlank()) {
-            tcName = tcName + " - Iteration " + iteration;
-        }
-        if (!subscriberId.isBlank()) {
-            tcName = tcName + " - " + subscriberId;
-        }
+    public static synchronized void startSuite() {
+        total = 0;
+        passed = 0;
+        failed = 0;
+        RESULTS.clear();
+        suiteStartTimeMs = System.currentTimeMillis();
+        suiteEndTimeMs = 0L;
+    }
 
-        ExtentTest extentTest = ExtentReportManager.createTest(tcName)
-                .assignCategory(
-                        safe(testCase.getType()),
-                        safe(testCase.getSuite())
-                );
-
-        int expectedStatus = testCase.getExpectedStatus() == null ? 200 : testCase.getExpectedStatus();
-        int actualStatus = 0;
-        finalStatus = "FAIL";
-
-        try {
-            String baseUrl = FrameworkConfig.getProperty(testCase.getBaseUrlProperty());
-            String url = safe(baseUrl) + safe(testCase.getEndpoint());
-
-            System.out.println("=================================================");
-            System.out.println("Project         : " + testCase.getProject());
-            System.out.println("TC ID           : " + testCase.getId());
-            System.out.println("Method          : " + testCase.getMethod());
-            System.out.println("Final URL       : " + url);
-            System.out.println("Headers         : " + testCase.getHeaders());
-            System.out.println("=================================================");
-
-            extentTest.info("Project: " + safe(testCase.getProject()));
-            extentTest.info("Method: " + safe(testCase.getMethod()));
-            extentTest.info("Final URL: " + url);
-            extentTest.info("Iteration: " + iteration);
-            extentTest.info("Context: " + String.valueOf(ExecutionContext.getAll()));
-
-            RequestSpecification request = RestAssured
-                    .given()
-                    .relaxedHTTPSValidation();
-
-            Map<String, String> resolvedHeaders = testCase.getHeaders();
-            if (resolvedHeaders != null && !resolvedHeaders.isEmpty()) {
-                request.headers(resolvedHeaders);
-                extentTest.info("Headers: " + resolvedHeaders);
-            }
-
-            preApiDbQuery(testCase, extentTest);
-
-            String requestBody = null;
-
-            if (testCase.getPayloadFile() != null && !testCase.getPayloadFile().isBlank()) {
-                String payloadPath = testCase.getPayloadFile();
-
-                InputStream is = Thread.currentThread()
-                        .getContextClassLoader()
-                        .getResourceAsStream(payloadPath);
-
-                if (is == null) {
-                    throw new RuntimeException("Payload file not found in classpath: " + payloadPath);
-                }
-
-                requestBody = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-                requestBody = applyPayloadData(requestBody, testCase.getPayloadData());
-                requestBody = replaceContextValues(requestBody);
-                requestBody = resolveInlineProperties(requestBody);
-
-                if (requestBody.contains("${")) {
-                    throw new RuntimeException("Unresolved placeholders found in request body: " + requestBody);
-                }
-
-                System.out.println("========== CONTEXT ==========");
-                System.out.println(ExecutionContext.getAll());
-                System.out.println("========== FINAL REQUEST BODY ==========");
-                System.out.println(requestBody);
-                System.out.println("========================================");
-
-                extentTest.info("Payload File: " + payloadPath);
-                extentTest.info("Payload Data: " + String.valueOf(testCase.getPayloadData()));
-                extentTest.info("<pre>" + escapeHtml(requestBody) + "</pre>");
-
-                request.body(requestBody);
-            }
-
-            System.out.println("STEP 5 - Before executeRequest");
-            Response response = executeRequest(request, testCase.getMethod(), url);
-            System.out.println("STEP 6 - After executeRequest");
-
-            actualStatus = response.getStatusCode();
-
-            System.out.println("Actual Status Code: " + actualStatus);
-            System.out.println("Response Body:");
-            System.out.println(response.getBody().asString());
-
-            extentTest.info("Actual Status Code: " + actualStatus);
-            extentTest.info("<pre>" + escapeHtml(response.getBody().asString()) + "</pre>");
-
-            ApiValidator.ValidationOutcome outcome = validator.validate(testCase, response);
-            finalStatus = outcome.passed() ? "PASS" : "FAIL";
-
-            ExecutionResult result = new ExecutionResult(
-                    testCase.getProject(),
-                    testCase.getId(),
-                    testCase.getName(),
-                    testCase.getMethod(),
-                    testCase.getType(),
-                    testCase.getSuite(),
-                    expectedStatus,
-                    actualStatus,
-                    finalStatus,
-                    System.currentTimeMillis() - startTime
-            );
-
-            result.getValidationDetails().addAll(outcome.details());
-
-            for (ValidationDetail detail : outcome.details()) {
-                String message =
-                        "Type: " + safe(detail.getType()) +
-                        " | Field: " + safe(detail.getField()) +
-                        " | Expected: " + safe(detail.getExpected()) +
-                        " | Actual: " + safe(detail.getActual());
-
-                if ("PASS".equalsIgnoreCase(detail.getStatus())) {
-                    extentTest.pass(message);
-                } else {
-                    extentTest.fail(message);
-                }
-            }
-
-            applyExtractions(testCase, response, result, extentTest);
-            postApiDbValidation(testCase, response, result, extentTest);
-
-            System.out.println("-------------------------------------------------");
-            for (ValidationDetail detail : result.getValidationDetails()) {
-                System.out.printf("%-14s | Field: %-30s | Expected: %-25s | Actual: %-25s | %s%n",
-                        safe(detail.getType()),
-                        safe(detail.getField()),
-                        safe(detail.getExpected()),
-                        safe(detail.getActual()),
-                        safe(detail.getStatus()));
-            }
-            System.out.println("-------------------------------------------------");
-            System.out.println("ExecutionResult status: " + result.getStatus());
-
+    public static synchronized void addResult(ExecutionResult result) {
+        if (result != null) {
+            RESULTS.add(result);
+            total++;
             if ("PASS".equalsIgnoreCase(result.getStatus())) {
-                extentTest.pass("Final Result: PASS");
+                passed++;
             } else {
-                extentTest.fail("Final Result: FAIL");
+                failed++;
             }
-
-            return result;
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            extentTest.fail(e);
-
-            return new ExecutionResult(
-                    testCase.getProject(),
-                    testCase.getId(),
-                    testCase.getName(),
-                    testCase.getMethod(),
-                    testCase.getType(),
-                    testCase.getSuite(),
-                    expectedStatus,
-                    actualStatus,
-                    "FAIL",
-                    System.currentTimeMillis() - startTime
-            );
-        } finally {
-            ExtentReportManager.flush();
         }
     }
 
-    private Response executeRequest(RequestSpecification request, String method, String url) {
-        switch (safe(method).toUpperCase()) {
-            case "GET":
-                return request.when().get(url);
-            case "POST":
-                return request.when().post(url);
-            case "PUT":
-                return request.when().put(url);
-            case "PATCH":
-                return request.when().patch(url);
-            case "DELETE":
-                return request.when().delete(url);
-            case "OPTIONS":
-                return request.when().options(url);
-            case "HEAD":
-                return request.when().head(url);
-            default:
-                throw new IllegalArgumentException("Unsupported method: " + method);
-        }
+    public static synchronized void endSuite() {
+        suiteEndTimeMs = System.currentTimeMillis();
     }
 
-    private void preApiDbQuery(TestCase testCase, ExtentTest extentTest) {
-        if (testCase.getDbQuery() == null) {
-            return;
-        }
+    public static synchronized void printSummary(String project, String environment) {
+        long duration = suiteEndTimeMs > 0 ? suiteEndTimeMs - suiteStartTimeMs : 0L;
 
-        DBQuery dbQuery = testCase.getDbQuery();
-
-        if (dbQuery.storeColumnsAs == null || dbQuery.storeColumnsAs.isEmpty()) {
-            return;
-        }
-
-        try {
-            String sql = resolveInlineProperties(dbQuery.sql);
-            sql = replaceContextValues(sql);
-
-            System.out.println("DB PRE - Connection: " + dbQuery.connection);
-            System.out.println("DB PRE - SQL: " + sql);
-
-            DBQueryResult dbResult = DBQueryExecutor.execute(dbQuery.connection, sql);
-
-            if (dbResult == null || dbResult.rows == null || dbResult.rows.isEmpty()) {
-                extentTest.fail("DB PRE query returned no rows");
-                return;
-            }
-
-            Map<String, Object> firstRow = dbResult.rows.get(0);
-
-            for (Map.Entry<String, String> entry : dbQuery.storeColumnsAs.entrySet()) {
-                String dbColumn = entry.getKey();
-                String contextKey = entry.getValue();
-
-                Object value = firstRow.get(dbColumn);
-
-                if (value == null) {
-                    for (Map.Entry<String, Object> rowEntry : firstRow.entrySet()) {
-                        if (rowEntry.getKey().equalsIgnoreCase(dbColumn)) {
-                            value = rowEntry.getValue();
-                            break;
-                        }
-                    }
-                }
-
-                String finalValue = value == null ? "" : value.toString();
-                ExecutionContext.put(contextKey, finalValue);
-
-                System.out.println("Stored in context: " + contextKey + " = " + finalValue);
-                extentTest.info("Stored in context: " + contextKey + " = " + finalValue);
-            }
-        } catch (Exception e) {
-            extentTest.fail("DB PRE query failed: " + e.getMessage());
-            throw new RuntimeException("DB PRE query failed", e);
-        }
+        System.out.println();
+        System.out.println("==================== TEST SUMMARY ====================");
+        System.out.println("Project      : " + safe(project));
+        System.out.println("Environment  : " + safe(environment));
+        System.out.println("Total        : " + total);
+        System.out.println("Passed       : " + passed);
+        System.out.println("Failed       : " + failed);
+        System.out.println("Duration(ms) : " + duration);
+        System.out.println("======================================================");
+        System.out.println();
     }
 
-    private void postApiDbValidation(TestCase testCase,
-                                     Response response,
-                                     ExecutionResult result,
-                                     ExtentTest extentTest) {
-        if (testCase.getDbQuery() == null) {
-            return;
-        }
-
-        DBQuery dbQuery = testCase.getDbQuery();
-
-        if ((dbQuery.compareColumn == null || dbQuery.compareColumn.isBlank()) &&
-                (dbQuery.expectedResponseXPath == null || dbQuery.expectedResponseXPath.isBlank()) &&
-                (dbQuery.expectedResponseJsonPath == null || dbQuery.expectedResponseJsonPath.isBlank())) {
-            return;
-        }
-
-        try {
-            String sql = resolveInlineProperties(dbQuery.sql);
-            sql = replaceContextValues(sql);
-
-            DBQueryResult dbResult = DBQueryExecutor.execute(dbQuery.connection, sql);
-
-            String dbValue = null;
-
-            if (dbResult != null && dbResult.rows != null && !dbResult.rows.isEmpty()) {
-                Map<String, Object> firstRow = dbResult.rows.get(0);
-
-                if (dbQuery.compareColumn != null && !dbQuery.compareColumn.isBlank()) {
-                    Object value = firstRow.get(dbQuery.compareColumn);
-
-                    if (value == null) {
-                        for (Map.Entry<String, Object> rowEntry : firstRow.entrySet()) {
-                            if (rowEntry.getKey().equalsIgnoreCase(dbQuery.compareColumn)) {
-                                value = rowEntry.getValue();
-                                break;
-                            }
-                        }
-                    }
-
-                    dbValue = normalize(value == null ? null : value.toString());
-                }
-            }
-
-            String apiValue = null;
-            String responseBody = response.getBody().asString();
-
-            if (dbQuery.expectedResponseXPath != null && !dbQuery.expectedResponseXPath.isBlank()) {
-                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-                factory.setNamespaceAware(false);
-
-                Document doc = factory.newDocumentBuilder()
-                        .parse(new InputSource(new StringReader(responseBody)));
-
-                XPath xpath = XPathFactory.newInstance().newXPath();
-                apiValue = xpath.evaluate(dbQuery.expectedResponseXPath, doc);
-                apiValue = normalize(apiValue);
-            }
-
-            String expectedRaw = safe(dbValue);
-            String actualRaw = safe(apiValue);
-
-            String expectedNormalized = normalize(expectedRaw);
-            String actualNormalized = normalize(actualRaw);
-
-            String summary = "DB Validation | API: [" + actualRaw + "] | DB: [" + expectedRaw + "]";
-            extentTest.info(summary);
-
-            System.out.println("expectedRaw         : [" + expectedRaw + "]");
-            System.out.println("actualRaw           : [" + actualRaw + "]");
-            System.out.println("expectedNormalized  : [" + expectedNormalized + "]");
-            System.out.println("actualNormalized    : [" + actualNormalized + "]");
-
-            if (Objects.equals(expectedNormalized, actualNormalized)) {
-                extentTest.pass("DB Validation Passed");
-                result.getValidationDetails().add(new ValidationDetail(
-                        "DB",
-                        safe(dbQuery.compareColumn),
-                        expectedRaw,
-                        actualRaw,
-                        "PASS"
-                ));
-            } else {
-                extentTest.fail("DB Validation Failed");
-                finalStatus = "FAIL";
-                result.getValidationDetails().add(new ValidationDetail(
-                        "DB",
-                        safe(dbQuery.compareColumn),
-                        expectedRaw,
-                        actualRaw,
-                        "FAIL"
-                ));
-            }
-        } catch (Exception e) {
-            extentTest.fail("DB Validation Error: " + e.getMessage());
-        }
-    }
-
-    private void applyExtractions(TestCase testCase,
-                                  Response response,
-                                  ExecutionResult result,
-                                  ExtentTest extentTest) {
-        List<ExtractionRule> extractions = testCase.getExtractions();
-        if (extractions == null || extractions.isEmpty()) {
-            return;
-        }
-
-        String responseBody = response.getBody() == null ? "" : response.getBody().asString();
-        boolean looksLikeXml = responseBody.trim().startsWith("<");
-
-        for (ExtractionRule ex : extractions) {
-            if (ex == null || ex.getKey() == null) {
-                continue;
-            }
-
-            Object value = null;
-
-            try {
-                if (ex.getJsonPath() != null && !ex.getJsonPath().isBlank()) {
-                    value = response.jsonPath().get(ex.getJsonPath());
-                } else if (looksLikeXml && ex.getXpath() != null && !ex.getXpath().isBlank()) {
-                    DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-                    factory.setNamespaceAware(false);
-
-                    Document doc = factory.newDocumentBuilder()
-                            .parse(new InputSource(new StringReader(responseBody)));
-
-                    XPath xpath = XPathFactory.newInstance().newXPath();
-                    value = xpath.evaluate(ex.getXpath(), doc);
-                }
-            } catch (Exception ignored) {
-            }
-
-            String finalValue = value == null ? "" : value.toString();
-
-            result.getExtractedValues().put(ex.getKey(), finalValue);
-            ExecutionContext.put(ex.getKey(), finalValue);
-
-            extentTest.info("Extracted: " + ex.getKey() + " = " + finalValue);
-        }
-    }
-
-    private String applyPayloadData(String template, Map<String, String> payloadData) {
-        if (template == null || payloadData == null || payloadData.isEmpty()) {
-            return template;
-        }
-
-        String resolved = template;
-
-        for (Map.Entry<String, String> entry : payloadData.entrySet()) {
-            String key = entry.getKey();
-            String value = entry.getValue() == null ? "" : entry.getValue();
-            resolved = resolved.replace("${" + key + "}", value);
-        }
-
-        return resolved;
-    }
-
-    private String replaceContextValues(String text) {
-        if (text == null || text.isBlank()) {
-            return text;
-        }
-
-        String resolved = text;
-        int guard = 0;
-
-        while (guard < 500) {
-            int start = resolved.indexOf("${");
-            if (start < 0) {
-                break;
-            }
-
-            int end = resolved.indexOf("}", start);
-            if (end < 0) {
-                break;
-            }
-
-            String key = resolved.substring(start + 2, end).trim();
-            Object ctxValue = ExecutionContext.get(key);
-            String value = ctxValue == null ? "" : String.valueOf(ctxValue);
-
-            resolved = resolved.substring(0, start) + value + resolved.substring(end + 1);
-            guard++;
-        }
-
-        return resolved;
-    }
-
-    private String resolveInlineProperties(String text) {
-        if (text == null || text.isBlank()) {
-            return text;
-        }
-
-        String resolved = text;
-        int guard = 0;
-
-        while (guard < 200) {
-            int start = resolved.indexOf("${");
-            if (start < 0) {
-                break;
-            }
-
-            int end = resolved.indexOf("}", start);
-            if (end < 0) {
-                break;
-            }
-
-            String key = resolved.substring(start + 2, end).trim();
-            String value = FrameworkConfig.getProperty(key);
-
-            if (value != null) {
-                resolved = resolved.substring(0, start) + value + resolved.substring(end + 1);
-            } else {
-                break;
-            }
-
-            guard++;
-        }
-
-        return resolved;
-    }
-
-    private String escapeHtml(String text) {
-        if (text == null) {
-            return "";
-        }
-
-        return text.replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;");
-    }
-
-    private String normalize(String value) {
-        if (value == null) {
-            return "";
-        }
-
-        return value
-                .replace('\u00A0', ' ')
-                .replaceAll("[\\u200B-\\u200D\\uFEFF]", "")
-                .replaceAll("[\\r\\n\\t]+", " ")
-                .replaceAll("\\s+", " ")
-                .trim()
-                .toLowerCase();
-    }
-
-    private String safe(String value) {
+    private static String safe(String value) {
         return value == null ? "" : value.trim();
     }
 }
