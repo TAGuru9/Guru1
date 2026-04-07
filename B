@@ -1,55 +1,73 @@
-package com.acfc.automation.util;
+package com.acfc.automation.data;
 
-import com.acfc.automation.config.FrameworkConfig;
+import com.acfc.automation.model.TestCase;
+import com.acfc.automation.util.FileResolver;
+import com.acfc.automation.util.JacksonUtil;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 
-public final class FileResolver {
+public class TestCaseLoader {
 
-    private FileResolver() {
+    private TestCaseLoader() {
     }
 
-    public static Path resolve(String inputPath) {
-        if (inputPath == null || inputPath.isBlank()) {
-            throw new RuntimeException("Input path is null or blank");
-        }
-
-        String trimmed = inputPath.trim();
-
-        // 1. Absolute path
-        Path direct = Paths.get(trimmed);
-        if (direct.isAbsolute() && Files.exists(direct)) {
-            return direct.toAbsolutePath().normalize();
-        }
-
-        // 2. Direct relative path from current working directory
-        if (Files.exists(direct)) {
-            return direct.toAbsolutePath().normalize();
-        }
-
-        // 3. Relative path under src/test/resources
-        Path resourcePath = FrameworkConfig.testResourcesDir().resolve(trimmed);
-        if (Files.exists(resourcePath)) {
-            return resourcePath.toAbsolutePath().normalize();
-        }
-
-        throw new RuntimeException(
-                "File not found. Checked absolute/direct/resources paths for: " + inputPath
-        );
-    }
-
-    public static boolean exists(String inputPath) {
+    public static List<TestCase> parse(String filePath) {
         try {
-            resolve(inputPath);
-            return true;
+            List<TestCase> cases = new ArrayList<>();
+
+            Path path = FileResolver.resolve(filePath);
+
+            if (!Files.exists(path)) {
+                throw new RuntimeException("Test case file not found: " + path);
+            }
+
+            TestCase testCase = JacksonUtil.mapper().readValue(path.toFile(), TestCase.class);
+            cases.add(testCase);
+
+            return cases;
         } catch (Exception e) {
-            return false;
+            throw new RuntimeException("Failed to parse test case file: " + filePath, e);
         }
     }
 
-    public static String resolveAsString(String inputPath) {
-        return resolve(inputPath).toString();
+    public static List<TestCase> loadAll() {
+        try {
+            List<TestCase> cases = new ArrayList<>();
+
+            Path dir = FileResolver.resolve("testcases");
+
+            if (!Files.exists(dir)) {
+                return cases;
+            }
+
+            Files.walk(dir)
+                    .filter(p -> p.toString().endsWith(".json"))
+                    .sorted()
+                    .forEach(p -> {
+                        try {
+                            cases.add(JacksonUtil.mapper().readValue(p.toFile(), TestCase.class));
+                        } catch (Exception e) {
+                            throw new RuntimeException("Failed to load test case: " + p, e);
+                        }
+                    });
+
+            return cases;
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to load testcase files", e);
+        }
+    }
+
+    public static List<TestCase> loadByRuntimeInput() {
+        String tcFile = System.getProperty("tcFile", "").trim();
+
+        if (!tcFile.isBlank()) {
+            return parse(tcFile);
+        }
+
+        return loadAll();
     }
 }
