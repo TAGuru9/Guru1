@@ -1,34 +1,40 @@
-package com.pepperapi.core.util;
+package com.pepperapi.core.engine;
 
-import java.io.*;
-import java.util.*;
+import com.pepperapi.core.context.ExecutionContext;
 
-public class FileDataReader {
+import java.util.List;
+import java.util.Map;
 
-    public static List<Map<String, String>> readKeyValueFile(String filePath) {
-        List<Map<String, String>> records = new ArrayList<>();
+public class LoopExecutor {
 
-        try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
-            String line;
+    public static void execute(List<Map<String, String>> records, String testCaseFile) {
 
-            while ((line = br.readLine()) != null) {
-                if (line.trim().isEmpty()) continue;
+        int iteration = 1;
 
-                Map<String, String> map = new HashMap<>();
-                String[] pairs = line.split(",");
+        for (Map<String, String> record : records) {
 
-                for (String pair : pairs) {
-                    String[] kv = pair.split("=");
-                    map.put(kv[0].trim(), kv[1].trim());
-                }
+            System.out.println("\n=================================================");
+            System.out.println("Iteration #" + iteration + " | Data: " + record);
+            System.out.println("=================================================\n");
 
-                records.add(map);
+            try {
+                // Clear context for each iteration
+                ExecutionContext.clear();
+
+                // Load record into context
+                record.forEach(ExecutionContext::put);
+
+                // Execute test case
+                APIExecutionEngine.execute(testCaseFile);
+
+                System.out.println("Iteration #" + iteration + " PASSED");
+
+            } catch (Exception e) {
+                System.err.println("Iteration #" + iteration + " FAILED");
+                e.printStackTrace();
             }
 
-        } catch (Exception e) {
-            throw new RuntimeException("Error reading file: " + filePath, e);
+            iteration++;
         }
-
-        return records;
     }
 }
