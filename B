@@ -1,7 +1,10 @@
 package com.acfc.automation.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.util.Map;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class DBQuery {
 
     public String connection;
@@ -12,6 +15,10 @@ public class DBQuery {
     public String compareColumn;
     public String expectedResponseXPath;
     public String expectedResponseJsonPath;
+
+    public Map<String, String> validateColumnsAgainstResponse;
+
+    public String resultKey;
 
     public String getConnection() {
         return connection;
@@ -39,5 +46,13 @@ public class DBQuery {
 
     public String getExpectedResponseJsonPath() {
         return expectedResponseJsonPath;
+    }
+
+    public Map<String, String> getValidateColumnsAgainstResponse() {
+        return validateColumnsAgainstResponse;
+    }
+
+    public String getResultKey() {
+        return resultKey;
     }
 }
