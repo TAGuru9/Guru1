@@ -1,58 +1,93 @@
-package com.acfc.automation.model;
+package com.acfc.automation.util;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.acfc.automation.config.FrameworkConfig;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
-public class DBQuery {
+public class TestDataReader {
 
-    public String connection;
-    public String sql;
-    public Map<String, String> params;
-    public Map<String, String> storeColumnsAs;
-
-    public String compareColumn;
-    public String expectedResponseXPath;
-    public String expectedResponseJsonPath;
-
-    public Map<String, String> validateColumnsAgainstResponse;
-
-    public String resultKey;
-
-    public String getConnection() {
-        return connection;
+    private TestDataReader() {
     }
 
-    public String getSql() {
-        return sql;
+    public static List<Map<String, String>> readData(String filePath, String delimiter) throws IOException {
+        Path resolvedPath = resolvePath(filePath);
+
+        String fileType = getFileType(resolvedPath.getFileName().toString());
+
+        if ("csv".equalsIgnoreCase(fileType)) {
+            return readDelimitedFile(resolvedPath, ",");
+        } else if ("txt".equalsIgnoreCase(fileType)) {
+            String actualDelimiter = (delimiter == null || delimiter.isBlank()) ? "|" : delimiter;
+            return readDelimitedFile(resolvedPath, actualDelimiter);
+        } else {
+            throw new IllegalArgumentException("Unsupported file type: " + fileType);
+        }
     }
 
-    public Map<String, String> getParams() {
-        return params;
+    private static Path resolvePath(String filePath) {
+        if (filePath == null || filePath.isBlank()) {
+            throw new IllegalArgumentException("Invalid file path: " + filePath);
+        }
+
+        Path directPath = Path.of(filePath);
+        if (Files.exists(directPath)) {
+            return directPath;
+        }
+
+        Path resourcePath = FrameworkConfig.testResourcesDir().resolve(filePath);
+        if (Files.exists(resourcePath)) {
+            return resourcePath;
+        }
+
+        throw new RuntimeException("Test data file not found. Checked: " + directPath + " and " + resourcePath);
     }
 
-    public Map<String, String> getStoreColumnsAs() {
-        return storeColumnsAs;
+    private static String getFileType(String filePath) {
+        int idx = filePath.lastIndexOf('.');
+        if (idx < 0 || idx == filePath.length() - 1) {
+            throw new IllegalArgumentException("Invalid file path: " + filePath);
+        }
+        return filePath.substring(idx + 1).toLowerCase();
     }
 
-    public String getCompareColumn() {
-        return compareColumn;
-    }
+    private static List<Map<String, String>> readDelimitedFile(Path path, String delimiter) throws IOException {
+        List<Map<String, String>> records = new ArrayList<>();
 
-    public String getExpectedResponseXPath() {
-        return expectedResponseXPath;
-    }
+        try (BufferedReader br = Files.newBufferedReader(path)) {
+            String headerLine = br.readLine();
+            if (headerLine == null || headerLine.isBlank()) {
+                return records;
+            }
 
-    public String getExpectedResponseJsonPath() {
-        return expectedResponseJsonPath;
-    }
+            String[] headers = headerLine.split(Pattern.quote(delimiter), -1);
 
-    public Map<String, String> getValidateColumnsAgainstResponse() {
-        return validateColumnsAgainstResponse;
-    }
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
 
-    public String getResultKey() {
-        return resultKey;
+                String[] values = line.split(Pattern.quote(delimiter), -1);
+                Map<String, String> row = new LinkedHashMap<>();
+
+                for (int i = 0; i < headers.length; i++) {
+                    String key = headers[i].trim();
+                    String value = i < values.length ? values[i].trim() : "";
+                    row.put(key, value);
+                }
+
+                records.add(row);
+            }
+        }
+
+        return records;
     }
 }
