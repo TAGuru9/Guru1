@@ -39,10 +39,12 @@ public abstract class ConfigDrivenApiRunner {
         ExecutionResultStore.clear();
 
         List<TestCase> allCases = TestCaseLoader.loadAll();
+        System.out.println("Loaded test cases count: " + allCases.size());
+
         List<TestCase> selectedCases = selectCases(allCases);
 
         if (selectedCases.isEmpty()) {
-            throw new IllegalArgumentException("No matching test cases found");
+            throw new IllegalArgumentException("No matching test cases found for ids/names");
         }
 
         List<DynamicTest> tests = new ArrayList<>();
@@ -52,9 +54,14 @@ public abstract class ConfigDrivenApiRunner {
             String resolvedDataFile = resolveDataFile(testCase);
             String resolvedDelimiter = resolveDelimiter(testCase);
 
+            System.out.println("Selected TC -> id=" + safe(testCase.getId())
+                    + ", name=" + safe(testCase.getName())
+                    + ", loopEnabled=" + loopEnabled
+                    + ", dataFile=" + resolvedDataFile
+                    + ", delimiter=" + resolvedDelimiter);
+
             if (loopEnabled && resolvedDataFile != null && !resolvedDataFile.isBlank()) {
-                List<Map<String, String>> records =
-                        TestDataReader.readData(resolvedDataFile, resolvedDelimiter);
+                List<Map<String, String>> records = TestDataReader.readData(resolvedDataFile, resolvedDelimiter);
 
                 if (records == null || records.isEmpty()) {
                     tests.add(DynamicTest.dynamicTest(
@@ -99,7 +106,7 @@ public abstract class ConfigDrivenApiRunner {
                     .collect(Collectors.toList());
 
             return allCases.stream()
-                    .filter(tc -> tc != null && ids.contains(safe(tc.getId())))
+                    .filter(tc -> tc != null && tc.getId() != null && ids.contains(tc.getId().trim()))
                     .collect(Collectors.toList());
         }
 
@@ -110,7 +117,7 @@ public abstract class ConfigDrivenApiRunner {
                     .collect(Collectors.toList());
 
             return allCases.stream()
-                    .filter(tc -> tc != null && names.contains(safe(tc.getName())))
+                    .filter(tc -> tc != null && tc.getName() != null && names.contains(tc.getName().trim()))
                     .collect(Collectors.toList());
         }
 
