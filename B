@@ -1,53 +1,64 @@
-package com.acfc.automation.engine;
+package com.acfc.automation.report.summary;
 
-import com.acfc.automation.context.ExecutionContext;
-import com.acfc.automation.data.TestCaseLoader;
 import com.acfc.automation.model.ExecutionResult;
-import com.acfc.automation.model.TestCase;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
-public class LoopExecutor {
+public class SummaryTracker {
 
-    private LoopExecutor() {
+    private static final List<ExecutionResult> RESULTS = new ArrayList<>();
+    private static long suiteStartTimeMs = 0L;
+    private static long suiteEndTimeMs = 0L;
+
+    private static int total;
+    private static int passed;
+    private static int failed;
+
+    private SummaryTracker() {
     }
 
-    public static void execute(List<Map<String, String>> records, String testCaseFile) {
-        int iteration = 1;
-        int passed = 0;
-        int failed = 0;
+    public static synchronized void startSuite() {
+        total = 0;
+        passed = 0;
+        failed = 0;
+        RESULTS.clear();
+        suiteStartTimeMs = System.currentTimeMillis();
+        suiteEndTimeMs = 0L;
+    }
 
-        ApiExecutionEngine engine = new ApiExecutionEngine();
-        TestCase testCase = TestCaseLoader.parse(testCaseFile).get(0);
-
-        for (Map<String, String> record : records) {
-            System.out.println("\n=================================================");
-            System.out.println("Iteration #" + iteration + " | Data: " + record);
-            System.out.println("=================================================\n");
-
-            try {
-                ExecutionContext.clear();
-                ExecutionContext.put("iteration", String.valueOf(iteration));
-                record.forEach(ExecutionContext::put);
-
-                ExecutionResult result = engine.execute(testCase);
-                System.out.println("Iteration #" + iteration + " status = " + result.getStatus());
-
+    public static synchronized void addResult(ExecutionResult result) {
+        if (result != null) {
+            RESULTS.add(result);
+            total++;
+            if ("PASS".equalsIgnoreCase(result.getStatus())) {
                 passed++;
-            } catch (Exception e) {
-                System.err.println("Iteration #" + iteration + " FAILED");
-                e.printStackTrace();
+            } else {
                 failed++;
             }
-
-            iteration++;
         }
+    }
 
-        System.out.println("\n================ FINAL SUMMARY =================");
-        System.out.println("Total  : " + records.size());
-        System.out.println("Passed : " + passed);
-        System.out.println("Failed : " + failed);
-        System.out.println("===============================================\n");
+    public static synchronized void endSuite() {
+        suiteEndTimeMs = System.currentTimeMillis();
+    }
+
+    public static synchronized void printSummary(String project, String environment) {
+        long duration = suiteEndTimeMs > 0 ? suiteEndTimeMs - suiteStartTimeMs : 0L;
+
+        System.out.println();
+        System.out.println("==================== TEST SUMMARY ====================");
+        System.out.println("Project      : " + safe(project));
+        System.out.println("Environment  : " + safe(environment));
+        System.out.println("Total        : " + total);
+        System.out.println("Passed       : " + passed);
+        System.out.println("Failed       : " + failed);
+        System.out.println("Duration(ms) : " + duration);
+        System.out.println("======================================================");
+        System.out.println();
+    }
+
+    private static String safe(String value) {
+        return value == null ? "" : value.trim();
     }
 }
