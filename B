@@ -3,63 +3,39 @@ public List<DynamicTest> execution() throws Exception {
     SummaryTracker.startSuite();
     ExecutionResultStore.clear();
 
-    String testCaseFile = System.getProperty("tcFile");
+    List<TestCase> allCases = TestCaseLoader.loadAll();
+    List<TestCase> selectedCases = selectCases(allCases);
 
-    if (testCaseFile == null || testCaseFile.isBlank()) {
-        throw new IllegalArgumentException("Missing system property: tcFile");
+    if (selectedCases.isEmpty()) {
+        throw new IllegalArgumentException("No matching test cases found");
     }
 
-    TestCase testCase = TestCaseLoader.parse(testCaseFile).get(0);
+    List<DynamicTest> tests = new ArrayList<>();
 
-    String dataFile = testCase.getDataFile();
-    String delimiter = testCase.getDelimiter() == null || testCase.getDelimiter().isBlank()
-            ? ","
-            : testCase.getDelimiter();
-    boolean loopEnabled = "true".equalsIgnoreCase(String.valueOf(testCase.getLoopEnabled()));
+    for (TestCase testCase : selectedCases) {
+        String dataFile = resolveDataFile(testCase);
+        String delimiter = resolveDelimiter(testCase);
+        boolean loopEnabled = isLoopEnabled(testCase);
 
-    if (loopEnabled && dataFile != null && !dataFile.isBlank()) {
-        List<Map<String, String>> records = TestDataReader.readData(dataFile, delimiter);
+        if (loopEnabled && dataFile != null && !dataFile.isBlank()) {
+            List<Map<String, String>> records = TestDataReader.readData(dataFile, delimiter);
 
-        return IntStream.range(0, records.size())
-                .mapToObj(i -> DynamicTest.dynamicTest(
-                        "Iteration " + (i + 1),
-                        () -> {
-                            Map<String, String> record = records.get(i);
+            for (int i = 0; i < records.size(); i++) {
+                int iteration = i + 1;
+                Map<String, String> record = records.get(i);
 
-                            ExecutionContext.clear();
-                            ExecutionContext.put("iteration", String.valueOf(i + 1));
-                            record.forEach(ExecutionContext::put);
-
-                            ExecutionResult result = engine.execute(testCase);
-                            ExecutionResultStore.add(result);
-                            SummaryTracker.addResult(result);
-
-                            Assertions.assertEquals(
-                                    "PASS",
-                                    safe(result.getStatus()).toUpperCase(),
-                                    "Test failed for iteration: " + (i + 1)
-                            );
-                        }
-                ))
-                .collect(Collectors.toList());
-    }
-
-    return List.of(
-            DynamicTest.dynamicTest(
+                tests.add(DynamicTest.dynamicTest(
+                        testCase.getId() + " - Iteration " + iteration,
+                        () -> executeLoopIteration(testCase, record, iteration)
+                ));
+            }
+        } else {
+            tests.add(DynamicTest.dynamicTest(
                     safe(testCase.getId()) + " - " + safe(testCase.getName()),
-                    () -> {
-                        ExecutionContext.clear();
+                    () -> executeSingle(testCase)
+            ));
+        }
+    }
 
-                        ExecutionResult result = engine.execute(testCase);
-                        ExecutionResultStore.add(result);
-                        SummaryTracker.addResult(result);
-
-                        Assertions.assertEquals(
-                                "PASS",
-                                safe(result.getStatus()).toUpperCase(),
-                                "Single test failed: " + safe(testCase.getId())
-                        );
-                    }
-            )
-    );
+    return tests;
 }
