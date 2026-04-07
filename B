@@ -1,70 +1,113 @@
-package com.acfc.automation.db;
+package com.acfc.automation.model;
 
-import com.acfc.automation.context.ExecutionContext;
-import com.acfc.automation.model.DBQuery;
-
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSetMetaData;
-import java.util.Collections;
-import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
-public class DbClient {
+public class TestCase {
 
-    public Map<String, Object> executeSingleRow(DBQuery query, Map<String, Object> context) {
-        String prefix = "db." + query.getConnection() + ".";
+    private String id;
+    private String name;
+    private String type;
+    private String suite;
+    private String project;
+    private String method;
+    private String baseUrlProperty;
+    private String endpoint;
+    private Map<String, String> headers;
 
-        String url = System.getProperty(prefix + "url");
-        String user = System.getProperty(prefix + "user");
-        String password = System.getProperty(prefix + "password");
-        String driver = System.getProperty(prefix + "driver");
+    private Object loopEnabled;
+    private String dataFile;
+    private String delimiter;
 
-        if (url == null || url.isBlank()) {
-            throw new IllegalArgumentException("Missing DB property: " + prefix + "url");
-        }
+    private String payloadFile;
+    private Map<String, String> payloadData;
+    private Integer expectedStatus;
 
-        try {
-            if (driver != null && !driver.isBlank()) {
-                Class.forName(driver);
-            }
+    private List<ExtractionRule> extractions;
+    private List<String> expectedBodyContains;
+    private Map<String, String> expectedBodyXpaths;
 
-            try (Connection conn = DriverManager.getConnection(url, user, password);
-                 PreparedStatement st = conn.prepareStatement(query.getSql())) {
+    private Boolean enabled;
 
-                Map<String, String> params = query.getParams();
-                if (params != null && !params.isEmpty()) {
-                    int index = 1;
-                    for (Map.Entry<String, String> entry : params.entrySet()) {
-                        String value = entry.getValue();
-                        if (value != null && value.startsWith("${") && value.endsWith("}")) {
-                            String key = value.substring(2, value.length() - 1).trim();
-                            Object ctxVal = ExecutionContext.get(key);
-                            st.setObject(index++, ctxVal);
-                        } else {
-                            st.setObject(index++, value);
-                        }
-                    }
-                }
+    private DBQuery dbQuery;
 
-                try (java.sql.ResultSet rs = st.executeQuery()) {
-                    if (!rs.next()) {
-                        return Collections.emptyMap();
-                    }
+    public String getId() {
+        return id;
+    }
 
-                    ResultSetMetaData meta = rs.getMetaData();
-                    Map<String, Object> row = new LinkedHashMap<>();
+    public String getName() {
+        return name;
+    }
 
-                    for (int i = 1; i <= meta.getColumnCount(); i++) {
-                        row.put(meta.getColumnLabel(i), rs.getObject(i));
-                    }
+    public String getType() {
+        return type;
+    }
 
-                    return row;
-                }
-            }
-        } catch (Exception e) {
-            throw new RuntimeException("DB query execution failed", e);
-        }
+    public String getSuite() {
+        return suite;
+    }
+
+    public String getProject() {
+        return project;
+    }
+
+    public String getMethod() {
+        return method;
+    }
+
+    public String getBaseUrlProperty() {
+        return baseUrlProperty;
+    }
+
+    public String getEndpoint() {
+        return endpoint;
+    }
+
+    public Map<String, String> getHeaders() {
+        return headers;
+    }
+
+    public Object getLoopEnabled() {
+        return loopEnabled;
+    }
+
+    public String getDataFile() {
+        return dataFile;
+    }
+
+    public String getDelimiter() {
+        return delimiter;
+    }
+
+    public String getPayloadFile() {
+        return payloadFile;
+    }
+
+    public Map<String, String> getPayloadData() {
+        return payloadData;
+    }
+
+    public Integer getExpectedStatus() {
+        return expectedStatus;
+    }
+
+    public List<ExtractionRule> getExtractions() {
+        return extractions;
+    }
+
+    public List<String> getExpectedBodyContains() {
+        return expectedBodyContains;
+    }
+
+    public Map<String, String> getExpectedBodyXpaths() {
+        return expectedBodyXpaths;
+    }
+
+    public Boolean getEnabled() {
+        return enabled;
+    }
+
+    public DBQuery getDbQuery() {
+        return dbQuery;
     }
 }
