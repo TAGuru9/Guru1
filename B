@@ -1,93 +1,88 @@
-package com.acfc.automation.util;
+package com.acfc.automation.report;
 
 import com.acfc.automation.config.FrameworkConfig;
+import com.aventstack.extentreports.ExtentReports;
+import com.aventstack.extentreports.ExtentTest;
+import com.aventstack.extentreports.reporter.ExtentSparkReporter;
 
-import java.io.BufferedReader;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Pattern;
+import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
-public class TestDataReader {
+public class ExtentReportManager {
 
-    private TestDataReader() {
+    private static ExtentReports extent;
+    private static final ThreadLocal<ExtentTest> TEST = new ThreadLocal<>();
+    private static String reportFilePath;
+
+    private ExtentReportManager() {
     }
 
-    public static List<Map<String, String>> readData(String filePath, String delimiter) throws IOException {
-        Path resolvedPath = resolvePath(filePath);
+    public static synchronized ExtentReports get() {
+        if (extent == null) {
+            try {
+                String project = safe(System.getProperty("project", FrameworkConfig.projectName()));
+                String suite = safe(System.getProperty("suite", "defaultSuite"));
+                String type = safe(System.getProperty("type", "defaultType"));
 
-        String fileType = getFileType(resolvedPath.getFileName().toString());
+                String timestamp = LocalDateTime.now()
+                        .format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS"));
 
-        if ("csv".equalsIgnoreCase(fileType)) {
-            return readDelimitedFile(resolvedPath, ",");
-        } else if ("txt".equalsIgnoreCase(fileType)) {
-            String actualDelimiter = (delimiter == null || delimiter.isBlank()) ? "|" : delimiter;
-            return readDelimitedFile(resolvedPath, actualDelimiter);
-        } else {
-            throw new IllegalArgumentException("Unsupported file type: " + fileType);
-        }
-    }
+                String fileName = project + "_" + suite + "_" + type + "_" + timestamp + ".html";
 
-    private static Path resolvePath(String filePath) {
-        if (filePath == null || filePath.isBlank()) {
-            throw new IllegalArgumentException("Invalid file path: " + filePath);
-        }
+                Path reportDir = Paths.get("reports", project, suite, type);
+                Files.createDirectories(reportDir);
 
-        Path directPath = Path.of(filePath);
-        if (Files.exists(directPath)) {
-            return directPath;
-        }
+                Path reportPath = reportDir.resolve(fileName);
+                reportFilePath = reportPath.toAbsolutePath().toString();
 
-        Path resourcePath = FrameworkConfig.testResourcesDir().resolve(filePath);
-        if (Files.exists(resourcePath)) {
-            return resourcePath;
-        }
+                ExtentSparkReporter spark = new ExtentSparkReporter(reportFilePath);
+                spark.config().setReportName(project + " | " + suite + " | " + type);
+                spark.config().setDocumentTitle("Automation Execution Report");
 
-        throw new RuntimeException("Test data file not found. Checked: " + directPath + " and " + resourcePath);
-    }
+                extent = new ExtentReports();
+                extent.attachReporter(spark);
 
-    private static String getFileType(String filePath) {
-        int idx = filePath.lastIndexOf('.');
-        if (idx < 0 || idx == filePath.length() - 1) {
-            throw new IllegalArgumentException("Invalid file path: " + filePath);
-        }
-        return filePath.substring(idx + 1).toLowerCase();
-    }
+                extent.setSystemInfo("Project", project);
+                extent.setSystemInfo("Suite", suite);
+                extent.setSystemInfo("Type", type);
+                extent.setSystemInfo("Environment", System.getProperty("env", FrameworkConfig.env()));
 
-    private static List<Map<String, String>> readDelimitedFile(Path path, String delimiter) throws IOException {
-        List<Map<String, String>> records = new ArrayList<>();
+                System.out.println("Extent report path: " + reportFilePath);
 
-        try (BufferedReader br = Files.newBufferedReader(path)) {
-            String headerLine = br.readLine();
-            if (headerLine == null || headerLine.isBlank()) {
-                return records;
-            }
-
-            String[] headers = headerLine.split(Pattern.quote(delimiter), -1);
-
-            String line;
-            while ((line = br.readLine()) != null) {
-                if (line.trim().isEmpty()) {
-                    continue;
-                }
-
-                String[] values = line.split(Pattern.quote(delimiter), -1);
-                Map<String, String> row = new LinkedHashMap<>();
-
-                for (int i = 0; i < headers.length; i++) {
-                    String key = headers[i].trim();
-                    String value = i < values.length ? values[i].trim() : "";
-                    row.put(key, value);
-                }
-
-                records.add(row);
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to initialize extent report", e);
             }
         }
+        return extent;
+    }
 
-        return records;
+    public static synchronized ExtentTest createTest(String testName) {
+        ExtentTest test = get().createTest(testName);
+        TEST.set(test);
+        return test;
+    }
+
+    public static ExtentTest getTest() {
+        return TEST.get();
+    }
+
+    public static synchronized void flush() {
+        if (extent != null) {
+            extent.flush();
+        }
+    }
+
+    public static String getReportFilePath() {
+        return reportFilePath;
+    }
+
+    private static String safe(String value) {
+        if (value == null || value.isBlank()) {
+            return "NA";
+        }
+        return value.trim().replaceAll("[^a-zA-Z0-9._-]", "_");
     }
 }
