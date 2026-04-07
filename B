@@ -1,0 +1,43 @@
+package com.acfc.automation.model;
+
+import java.util.Map;
+
+public class DBQuery {
+
+    public String connection;
+    public String sql;
+    public Map<String, String> params;
+    public Map<String, String> storeColumnsAs;
+
+    public String compareColumn;
+    public String expectedResponseXPath;
+    public String expectedResponseJsonPath;
+
+    public String getConnection() {
+        return connection;
+    }
+
+    public String getSql() {
+        return sql;
+    }
+
+    public Map<String, String> getParams() {
+        return params;
+    }
+
+    public Map<String, String> getStoreColumnsAs() {
+        return storeColumnsAs;
+    }
+
+    public String getCompareColumn() {
+        return compareColumn;
+    }
+
+    public String getExpectedResponseXPath() {
+        return expectedResponseXPath;
+    }
+
+    public String getExpectedResponseJsonPath() {
+        return expectedResponseJsonPath;
+    }
+}
