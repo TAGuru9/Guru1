@@ -1,66 +1,65 @@
-package com.acfc.automation.data;
+@TestFactory
+public List<DynamicTest> execution() throws Exception {
+    SummaryTracker.startSuite();
+    ExecutionResultStore.clear();
 
-import com.acfc.automation.config.FrameworkConfig;
-import com.acfc.automation.model.TestCase;
-import com.acfc.automation.util.JacksonUtil;
+    String testCaseFile = System.getProperty("tcFile");
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-
-public class TestCaseLoader {
-
-    private TestCaseLoader() {
+    if (testCaseFile == null || testCaseFile.isBlank()) {
+        throw new IllegalArgumentException("Missing system property: tcFile");
     }
 
-    public static List<TestCase> parse(String filePath) {
-        try {
-            List<TestCase> cases = new ArrayList<>();
+    TestCase testCase = TestCaseLoader.parse(testCaseFile).get(0);
 
-            Path path = FrameworkConfig.testResourcesDir().resolve(filePath);
+    String dataFile = testCase.getDataFile();
+    String delimiter = testCase.getDelimiter() == null || testCase.getDelimiter().isBlank()
+            ? ","
+            : testCase.getDelimiter();
+    boolean loopEnabled = "true".equalsIgnoreCase(String.valueOf(testCase.getLoopEnabled()));
 
-            if (!Files.exists(path)) {
-                throw new RuntimeException("Test case file not found: " + path);
-            }
+    if (loopEnabled && dataFile != null && !dataFile.isBlank()) {
+        List<Map<String, String>> records = TestDataReader.readData(dataFile, delimiter);
 
-            TestCase testCase = JacksonUtil.mapper().readValue(path.toFile(), TestCase.class);
-            cases.add(testCase);
+        return IntStream.range(0, records.size())
+                .mapToObj(i -> DynamicTest.dynamicTest(
+                        "Iteration " + (i + 1),
+                        () -> {
+                            Map<String, String> record = records.get(i);
 
-            return cases;
+                            ExecutionContext.clear();
+                            ExecutionContext.put("iteration", String.valueOf(i + 1));
+                            record.forEach(ExecutionContext::put);
 
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to parse test case file: " + filePath, e);
-        }
-    }
+                            ExecutionResult result = engine.execute(testCase);
+                            ExecutionResultStore.add(result);
+                            SummaryTracker.addResult(result);
 
-    public static List<TestCase> loadAll() {
-        try {
-            List<TestCase> cases = new ArrayList<>();
-
-            Path dir = FrameworkConfig.testResourcesDir().resolve("testcases");
-
-            if (!Files.exists(dir)) {
-                return cases;
-            }
-
-            Files.walk(dir)
-                    .filter(Files::isRegularFile)
-                    .filter(p -> p.toString().endsWith(".json"))
-                    .sorted()
-                    .forEach(p -> {
-                        try {
-                            cases.add(JacksonUtil.mapper().readValue(p.toFile(), TestCase.class));
-                        } catch (Exception e) {
-                            throw new RuntimeException("Failed to load test case: " + p, e);
+                            Assertions.assertEquals(
+                                    "PASS",
+                                    safe(result.getStatus()).toUpperCase(),
+                                    "Test failed for iteration: " + (i + 1)
+                            );
                         }
-                    });
-
-            return cases;
-
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to load all test cases", e);
-        }
+                ))
+                .collect(Collectors.toList());
     }
+
+    return List.of(
+            DynamicTest.dynamicTest(
+                    safe(testCase.getId()) + " - " + safe(testCase.getName()),
+                    () -> {
+                        ExecutionContext.clear();
+
+                        ExecutionResult result = engine.execute(testCase);
+                        ExecutionResultStore.add(result);
+                        SummaryTracker.addResult(result);
+
+                        Assertions.assertEquals(
+                                "PASS",
+                                safe(result.getStatus()).toUpperCase(),
+                                "Single test failed: " + safe(testCase.getId())
+                        );
+                    }
+            )
+    );
 }
