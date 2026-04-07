@@ -1,43 +1,34 @@
-plugins {
-    id 'java'
-}
+package com.pepperapi.core.util;
 
-dependencies {
-    implementation project(':core')
+import java.io.*;
+import java.util.*;
 
-    testImplementation platform('org.junit:junit-bom:5.10.2')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
-}
+public class FileDataReader {
 
-test {
-    useJUnitPlatform()
+    public static List<Map<String, String>> readKeyValueFile(String filePath) {
+        List<Map<String, String>> records = new ArrayList<>();
 
-    testLogging {
-        events 'passed', 'failed', 'skipped', 'standard_out', 'standard_error'
-        showStandardStreams = true
-        exceptionFormat 'full'
-    }
+        try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+            String line;
 
-    afterSuite { desc, result ->
-        if (!desc.parent) {
-            println()
-            println '==================== TEST SUMMARY ===================='
-            println "Result  : ${result.resultType}"
-            println "Total   : ${result.testCount}"
-            println "Passed  : ${result.successfulTestCount}"
-            println "Failed  : ${result.failedTestCount}"
-            println "Skipped : ${result.skippedTestCount}"
-            println "JUnit Report : file:///${project.buildDir}/reports/tests/test/index.html"
-            println '====================================================='
-            println()
+            while ((line = br.readLine()) != null) {
+                if (line.trim().isEmpty()) continue;
+
+                Map<String, String> map = new HashMap<>();
+                String[] pairs = line.split(",");
+
+                for (String pair : pairs) {
+                    String[] kv = pair.split("=");
+                    map.put(kv[0].trim(), kv[1].trim());
+                }
+
+                records.add(map);
+            }
+
+        } catch (Exception e) {
+            throw new RuntimeException("Error reading file: " + filePath, e);
         }
-    }
 
-    systemProperty 'db.customerdb.url', project.findProperty('db.customerdb.url') ?: ''
-    systemProperty 'db.customerdb.driver', project.findProperty('db.customerdb.driver') ?: ''
-    systemProperty 'db.customerdb.user', project.findProperty('db.customerdb.user') ?: ''
-    systemProperty 'db.customerdb.password', project.findProperty('db.customerdb.password') ?: ''
-    systemProperty 'db.sqlserver.server', project.findProperty('db.sqlserver.server') ?: ''
-    systemProperty 'db.sqlserver.instance', project.findProperty('db.sqlserver.instance') ?: ''
-    systemProperty 'db.sqlserver.database', project.findProperty('db.sqlserver.database') ?: ''
+        return records;
+    }
 }
