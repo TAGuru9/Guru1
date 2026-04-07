@@ -1,40 +1,136 @@
-package com.pepperapi.core.engine;
+package com.acfc.automation.runner;
 
-import com.pepperapi.core.context.ExecutionContext;
+import com.acfc.automation.config.FrameworkConfig;
+import com.acfc.automation.context.ExecutionContext;
+import com.acfc.automation.engine.ApiExecutionEngine;
+import com.acfc.automation.model.ExecutionResult;
+import com.acfc.automation.model.TestCase;
+import com.acfc.automation.report.ExtentReportManager;
+import com.acfc.automation.report.ExecutionResultStore;
+import com.acfc.automation.report.SummaryTracker;
+import com.acfc.automation.util.TestDataReader;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.DynamicTest;
+import org.junit.jupiter.api.TestFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
-public class LoopExecutor {
+public abstract class ConfigDrivenApiRunner {
 
-    public static void execute(List<Map<String, String>> records, String testCaseFile) {
+    private static final ApiExecutionEngine engine = new ApiExecutionEngine();
 
-        int iteration = 1;
+    protected abstract String project();
 
-        for (Map<String, String> record : records) {
+    protected String suite() {
+        return null;
+    }
 
-            System.out.println("\n=================================================");
-            System.out.println("Iteration #" + iteration + " | Data: " + record);
-            System.out.println("=================================================\n");
+    @TestFactory
+    public List<DynamicTest> execution() throws Exception {
+        SummaryTracker.startSuite();
+        ExecutionResultStore.clear();
 
-            try {
-                // Clear context for each iteration
-                ExecutionContext.clear();
+        String testCaseFile = System.getProperty("tcFile");
+        String dataFile = System.getProperty("dataFile");
 
-                // Load record into context
-                record.forEach(ExecutionContext::put);
+        if (testCaseFile == null || testCaseFile.isBlank()) {
+            throw new IllegalArgumentException("Missing system property: tcFile");
+        }
 
-                // Execute test case
-                APIExecutionEngine.execute(testCaseFile);
+        // Case 1: CSV / TXT execution
+        if (dataFile != null && !dataFile.isBlank()) {
 
-                System.out.println("Iteration #" + iteration + " PASSED");
+            List<Map<String, String>> records = TestDataReader.readData(dataFile, ",");
+            List<TestCase> parsedCases = TestCaseFileLoader.parse(testCaseFile);
 
-            } catch (Exception e) {
-                System.err.println("Iteration #" + iteration + " FAILED");
-                e.printStackTrace();
+            if (parsedCases == null || parsedCases.isEmpty()) {
+                throw new IllegalArgumentException("No test case found in file: " + testCaseFile);
             }
 
-            iteration++;
+            TestCase testCase = parsedCases.get(0);
+
+            return IntStream.range(0, records.size())
+                    .mapToObj(i -> DynamicTest.dynamicTest(
+                            "Iteration " + (i + 1),
+                            () -> {
+                                Map<String, String> record = records.get(i);
+
+                                ExecutionContext.clear();
+                                ExecutionContext.put("iteration", String.valueOf(i + 1));
+                                record.forEach(ExecutionContext::put);
+
+                                ExecutionResult result = engine.execute(testCase);
+                                ExecutionResultStore.add(result);
+                                SummaryTracker.record(result);
+
+                                System.out.printf(
+                                        "%s | %s | %s | Exp=%s | Act=%s | %s%n",
+                                        safe(result.getProject()),
+                                        safe(result.getId()),
+                                        safe(result.getName()),
+                                        result.getExpectedStatus(),
+                                        result.getActualStatus(),
+                                        safe(result.getStatus())
+                                );
+
+                                Assertions.assertEquals(
+                                        "PASS",
+                                        safe(result.getStatus()).toUpperCase(),
+                                        "Test failed for iteration: " + (i + 1)
+                                );
+                            }
+                    ))
+                    .collect(Collectors.toList());
         }
+
+        // Case 2: Normal execution - no CSV/TXT
+        List<TestCase> cases = TestCaseFilter.filter(TestCaseLoader.loadAll());
+
+        return cases.stream()
+                .map(tc -> DynamicTest.dynamicTest(
+                        safe(tc.getId()) + " - " + safe(tc.getName()),
+                        () -> {
+                            ExecutionContext.clear();
+
+                            ExecutionResult result = engine.execute(tc);
+                            ExecutionResultStore.add(result);
+                            SummaryTracker.record(result);
+
+                            System.out.printf(
+                                    "%s | %s | %s | Exp=%s | Act=%s | %s%n",
+                                    safe(result.getProject()),
+                                    safe(result.getId()),
+                                    safe(result.getName()),
+                                    result.getExpectedStatus(),
+                                    result.getActualStatus(),
+                                    safe(result.getStatus())
+                            );
+
+                            Assertions.assertEquals(
+                                    "PASS",
+                                    safe(result.getStatus()).toUpperCase(),
+                                    "Single test failed: " + safe(tc.getId())
+                            );
+                        }
+                ))
+                .collect(Collectors.toList());
+    }
+
+    @AfterAll
+    public static void afterAll() {
+        SummaryTracker.endSuite();
+        SummaryTracker.printSummary(
+                System.getProperty("project", FrameworkConfig.projectName()),
+                System.getProperty("env", FrameworkConfig.env())
+        );
+        ExtentReportManager.flush();
+    }
+
+    private static String safe(String value) {
+        return value == null ? "" : value.trim();
     }
 }
