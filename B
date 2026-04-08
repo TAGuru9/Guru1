@@ -1,81 +1,75 @@
 package com.acfc.automation.db;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-public class DBQueryExecutor {
+public class DBQueryResult {
 
-    private DBQueryExecutor() {
+    private String connectionName;
+    private String sql;
+    private List<Object> params = new ArrayList<>();
+    private List<Map<String, Object>> rows = new ArrayList<>();
+    private int rowCount;
+    private String status;
+    private String message;
+
+    public DBQueryResult() {
     }
 
-    public static DBQueryResult execute(String connectionName, String sql) {
-        return execute(connectionName, sql, null);
+    public String getConnectionName() {
+        return connectionName;
     }
 
-    public static DBQueryResult execute(String connectionName, String sql, List<Object> params) {
-        DBQueryResult result = new DBQueryResult();
+    public void setConnectionName(String connectionName) {
+        this.connectionName = connectionName;
+    }
 
-        result.setConnectionName(connectionName);
-        result.setSql(sql);
-        result.setParams(params == null ? new ArrayList<>() : params);
+    public String getSql() {
+        return sql;
+    }
 
-        System.out.println("Testing DB execute...");
-        System.out.println("Connection Name: " + connectionName);
-        System.out.println("SQL: " + sql);
+    public void setSql(String sql) {
+        this.sql = sql;
+    }
 
-        List<Map<String, Object>> rows = new ArrayList<>();
+    public List<Object> getParams() {
+        return params;
+    }
 
-        try (Connection connection = DbConnectionManager.getConnection(connectionName);
-             PreparedStatement ps = connection.prepareStatement(sql)) {
+    public void setParams(List<Object> params) {
+        this.params = params;
+    }
 
-            if (params != null && !params.isEmpty()) {
-                for (int i = 0; i < params.size(); i++) {
-                    ps.setObject(i + 1, params.get(i));
-                }
-            }
+    public List<Map<String, Object>> getRows() {
+        return rows;
+    }
 
-            try (ResultSet rs = ps.executeQuery()) {
-                ResultSetMetaData meta = rs.getMetaData();
-                int columnCount = meta.getColumnCount();
+    public void setRows(List<Map<String, Object>> rows) {
+        this.rows = rows;
+    }
 
-                while (rs.next()) {
-                    Map<String, Object> row = new LinkedHashMap<>();
+    public int getRowCount() {
+        return rowCount;
+    }
 
-                    for (int i = 1; i <= columnCount; i++) {
-                        String columnName = meta.getColumnLabel(i);
-                        if (columnName == null || columnName.isBlank()) {
-                            columnName = meta.getColumnName(i);
-                        }
-                        row.put(columnName, rs.getObject(i));
-                    }
+    public void setRowCount(int rowCount) {
+        this.rowCount = rowCount;
+    }
 
-                    rows.add(row);
-                }
-            }
+    public String getStatus() {
+        return status;
+    }
 
-            result.setRows(rows);
-            result.setRowCount(rows.size());
-            result.setStatus("SUCCESS");
-            result.setMessage("Query executed successfully");
+    public void setStatus(String status) {
+        this.status = status;
+    }
 
-            System.out.println("DB rows fetched: " + rows.size());
+    public String getMessage() {
+        return message;
+    }
 
-        } catch (Exception e) {
-            result.setRows(new ArrayList<>());
-            result.setRowCount(0);
-            result.setStatus("FAIL");
-            result.setMessage(e.getMessage());
-
-            System.out.println("DB query failed: " + e.getMessage());
-            throw new RuntimeException("DB query failed for connection [" + connectionName + "]", e);
-        }
-
-        return result;
+    public void setMessage(String message) {
+        this.message = message;
     }
 }
