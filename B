@@ -1,221 +1,578 @@
-package com.acfc.automation.runner;
+package com.acfc.automation.engine;
 
 import com.acfc.automation.config.FrameworkConfig;
 import com.acfc.automation.context.ExecutionContext;
-import com.acfc.automation.data.TestCaseLoader;
-import com.acfc.automation.engine.ApiExecutionEngine;
+import com.acfc.automation.db.DBQueryExecutor;
+import com.acfc.automation.db.DBQueryResult;
+import com.acfc.automation.model.DBQuery;
 import com.acfc.automation.model.ExecutionResult;
+import com.acfc.automation.model.ExtractionRule;
 import com.acfc.automation.model.TestCase;
-import com.acfc.automation.report.ExecutionResultStore;
+import com.acfc.automation.model.ValidationDetail;
 import com.acfc.automation.report.ExtentReportManager;
-import com.acfc.automation.report.summary.SummaryTracker;
-import com.acfc.automation.util.TestDataReader;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.DynamicTest;
-import org.junit.jupiter.api.TestFactory;
+import com.acfc.automation.report.KpiTracker;
+import com.acfc.automation.util.FileResolver;
+import com.aventstack.extentreports.ExtentTest;
+import io.restassured.RestAssured;
+import io.restassured.response.Response;
+import io.restassured.specification.RequestSpecification;
+import org.w3c.dom.Document;
+import org.xml.sax.InputSource;
 
-import java.util.ArrayList;
-import java.util.Arrays;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathFactory;
+import java.io.InputStream;
+import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.Objects;
 
-public abstract class ConfigDrivenApiRunner {
+public class ApiExecutionEngine {
 
-    private static final ApiExecutionEngine engine = new ApiExecutionEngine();
+    private final ApiValidator validator = new ApiValidator();
+    private String finalStatus = "PASS";
 
-    protected String project() {
-        return System.getProperty("project", FrameworkConfig.projectName());
-    }
+    public ExecutionResult execute(TestCase testCase) {
+        long startTime = System.currentTimeMillis();
+        LocalDateTime startDateTime = LocalDateTime.now();
 
-    protected String suite() {
-        return System.getProperty("suite", "");
-    }
+        String iteration = safe(ExecutionContext.getAsString("iteration"));
+        String tcName = safe(testCase.getId()) + " - " + safe(testCase.getName());
 
-    @TestFactory
-    public List<DynamicTest> execution() throws Exception {
-        SummaryTracker.startSuite();
-        ExecutionResultStore.clear();
-
-        List<TestCase> allCases = TestCaseLoader.loadByRuntimeInput();
-        System.out.println("Loaded test cases count: " + allCases.size());
-
-        String tcFile = System.getProperty("tcFile", "").trim();
-
-        List<TestCase> selectedCases;
-        if (!tcFile.isBlank()) {
-            selectedCases = allCases;
-        } else {
-            selectedCases = selectCases(allCases);
+        if (!iteration.isBlank()) {
+            tcName = tcName + " - Iteration " + iteration;
         }
 
-        if (selectedCases.isEmpty()) {
-            throw new IllegalArgumentException("No matching test cases found for ids/names");
-        }
+        ExtentTest extentTest = ExtentReportManager.createTest(tcName)
+                .assignCategory(
+                        safe(testCase.getType()),
+                        safe(testCase.getSuite())
+                );
 
-        List<DynamicTest> tests = new ArrayList<>();
+        int expectedStatus = testCase.getExpectedStatus() == null ? 200 : testCase.getExpectedStatus();
+        int actualStatus = 0;
+        finalStatus = "FAIL";
 
-        for (TestCase testCase : selectedCases) {
-            boolean loopEnabled = isLoopEnabled(testCase);
-            String resolvedDataFile = resolveDataFile(testCase);
-            String resolvedDelimiter = resolveDelimiter(testCase);
+        String resolvedPayloadFileForKpi = resolvePayloadFile(testCase);
+        String resolvedDataFileForKpi = ExecutionContext.getAsString("runtimeDataFile");
 
-            System.out.println("Selected TC -> id=" + safe(testCase.getId())
-                    + ", name=" + safe(testCase.getName())
-                    + ", loopEnabled=" + loopEnabled
-                    + ", dataFile=" + resolvedDataFile
-                    + ", delimiter=" + resolvedDelimiter);
+        try {
+            String baseUrl = FrameworkConfig.getProperty(testCase.getBaseUrlProperty());
+            String url = safe(baseUrl) + safe(testCase.getEndpoint());
 
-            if (loopEnabled && resolvedDataFile != null && !resolvedDataFile.isBlank()) {
-                List<Map<String, String>> records = TestDataReader.readData(resolvedDataFile, resolvedDelimiter);
+            extentTest.info("Project: " + safe(testCase.getProject()));
+            extentTest.info("Method: " + safe(testCase.getMethod()));
+            extentTest.info("Final URL: " + url);
+            extentTest.info("Iteration: " + iteration);
+            extentTest.info("Context: " + String.valueOf(ExecutionContext.getAll()));
 
-                if (records == null || records.isEmpty()) {
-                    tests.add(DynamicTest.dynamicTest(
-                            safe(testCase.getId()) + " - no loop data",
-                            () -> {
-                                throw new IllegalArgumentException(
-                                        "Loop is enabled but no records found in file: " + resolvedDataFile
-                                );
-                            }
-                    ));
-                    continue;
+            RequestSpecification request = RestAssured
+                    .given()
+                    .relaxedHTTPSValidation();
+
+            Map<String, String> resolvedHeaders = testCase.getHeaders();
+            if (resolvedHeaders != null && !resolvedHeaders.isEmpty()) {
+                request.headers(resolvedHeaders);
+                extentTest.info("Headers: " + resolvedHeaders);
+            }
+
+            preApiDbQuery(testCase, extentTest);
+
+            String requestBody = buildRequestBody(testCase, extentTest);
+            if (requestBody != null) {
+                request.body(requestBody);
+            }
+
+            Response response = executeRequest(request, testCase.getMethod(), url);
+            actualStatus = response.getStatusCode();
+
+            extentTest.info("Actual Status Code: " + actualStatus);
+            extentTest.info("<pre>" + escapeHtml(response.getBody().asString()) + "</pre>");
+
+            ApiValidator.ValidationOutcome outcome = validator.validate(testCase, response);
+            finalStatus = outcome.passed() ? "PASS" : "FAIL";
+
+            ExecutionResult result = new ExecutionResult(
+                    testCase.getProject(),
+                    testCase.getId(),
+                    testCase.getName(),
+                    testCase.getMethod(),
+                    testCase.getType(),
+                    testCase.getSuite(),
+                    expectedStatus,
+                    actualStatus,
+                    finalStatus,
+                    System.currentTimeMillis() - startTime
+            );
+
+            result.getValidationDetails().addAll(outcome.details());
+
+            for (ValidationDetail detail : outcome.details()) {
+                String message =
+                        "Type: " + safe(detail.getType()) +
+                        " | Field: " + safe(detail.getField()) +
+                        " | Expected: " + safe(detail.getExpected()) +
+                        " | Actual: " + safe(detail.getActual());
+
+                if ("PASS".equalsIgnoreCase(detail.getStatus())) {
+                    extentTest.pass(message);
+                } else {
+                    extentTest.fail(message);
                 }
+            }
 
-                for (int i = 0; i < records.size(); i++) {
-                    final int iteration = i + 1;
-                    final Map<String, String> record = records.get(i);
+            applyExtractions(testCase, response, result, extentTest);
+            postApiDbValidation(testCase, response, result, extentTest);
 
-                    String displayName = safe(testCase.getId()) + " - Iteration " + iteration;
-
-                    tests.add(DynamicTest.dynamicTest(
-                            displayName,
-                            () -> executeLoopIteration(testCase, record, iteration, resolvedDataFile)
-                    ));
-                }
+            if ("PASS".equalsIgnoreCase(result.getStatus())) {
+                extentTest.pass("Final Result: PASS");
             } else {
-                tests.add(DynamicTest.dynamicTest(
-                        safe(testCase.getId()) + " - " + safe(testCase.getName()),
-                        () -> executeSingle(testCase, resolvedDataFile)
-                ));
+                extentTest.fail("Final Result: FAIL");
+            }
+
+            KpiTracker.publish(
+                    testCase,
+                    result,
+                    startDateTime,
+                    LocalDateTime.now(),
+                    resolvedDataFileForKpi,
+                    resolvedPayloadFileForKpi,
+                    null
+            );
+
+            return result;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            extentTest.fail(e);
+
+            ExecutionResult failedResult = new ExecutionResult(
+                    testCase.getProject(),
+                    testCase.getId(),
+                    testCase.getName(),
+                    testCase.getMethod(),
+                    testCase.getType(),
+                    testCase.getSuite(),
+                    expectedStatus,
+                    actualStatus,
+                    "FAIL",
+                    System.currentTimeMillis() - startTime
+            );
+
+            KpiTracker.publish(
+                    testCase,
+                    failedResult,
+                    startDateTime,
+                    LocalDateTime.now(),
+                    resolvedDataFileForKpi,
+                    resolvedPayloadFileForKpi,
+                    e.getMessage()
+            );
+
+            return failedResult;
+        } finally {
+            ExtentReportManager.flush();
+        }
+    }
+
+    private String buildRequestBody(TestCase testCase, ExtentTest extentTest) throws Exception {
+        String inlinePayload = System.getProperty("payloadInline", "").trim();
+        Map<String, String> resolvedPayloadData = resolvePayloadData(testCase);
+
+        String requestBody = null;
+
+        if (!inlinePayload.isBlank()) {
+            requestBody = inlinePayload;
+            extentTest.info("Payload Source: runtime inline payload");
+        } else {
+            String resolvedPayloadFile = resolvePayloadFile(testCase);
+
+            if (resolvedPayloadFile == null || resolvedPayloadFile.isBlank()) {
+                return null;
+            }
+
+            Path resolvedPath = FileResolver.resolve(resolvedPayloadFile);
+
+            try (InputStream is = Files.newInputStream(resolvedPath)) {
+                requestBody = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            }
+
+            extentTest.info("Payload File (resolved): " + resolvedPath.toAbsolutePath());
+        }
+
+        requestBody = applyPayloadData(requestBody, resolvedPayloadData);
+        requestBody = replaceContextValues(requestBody);
+        requestBody = resolveInlineProperties(requestBody);
+
+        if (requestBody.contains("${")) {
+            throw new RuntimeException("Unresolved placeholders found in request body: " + requestBody);
+        }
+
+        System.out.println("========== CONTEXT ==========");
+        System.out.println(ExecutionContext.getAll());
+        System.out.println("========== FINAL REQUEST BODY ==========");
+        System.out.println(requestBody);
+        System.out.println("========================================");
+
+        extentTest.info("Payload Data: " + String.valueOf(resolvedPayloadData));
+        extentTest.info("<pre>" + escapeHtml(requestBody) + "</pre>");
+
+        return requestBody;
+    }
+
+    private String resolvePayloadFile(TestCase testCase) {
+        String override = System.getProperty("payloadFile", "").trim();
+        if (!override.isBlank()) {
+            return override;
+        }
+        return testCase.getPayloadFile();
+    }
+
+    private Map<String, String> resolvePayloadData(TestCase testCase) {
+        String inline = System.getProperty("payloadData", "").trim();
+
+        if (inline.isBlank()) {
+            return testCase.getPayloadData();
+        }
+
+        Map<String, String> map = new LinkedHashMap<>();
+        String[] pairs = inline.split(",");
+
+        for (String pair : pairs) {
+            if (pair == null || pair.isBlank()) {
+                continue;
+            }
+
+            String[] kv = pair.split("=", 2);
+            String key = kv[0].trim();
+            String value = kv.length > 1 ? kv[1].trim() : "";
+
+            if (!key.isBlank()) {
+                map.put(key, value);
             }
         }
 
-        return tests;
+        return map;
     }
 
-    private List<TestCase> selectCases(List<TestCase> allCases) {
-        String idsProp = System.getProperty("ids", "").trim();
-        String namesProp = System.getProperty("names", "").trim();
+    private Response executeRequest(RequestSpecification request, String method, String url) {
+        switch (safe(method).toUpperCase()) {
+            case "GET":
+                return request.when().get(url);
+            case "POST":
+                return request.when().post(url);
+            case "PUT":
+                return request.when().put(url);
+            case "PATCH":
+                return request.when().patch(url);
+            case "DELETE":
+                return request.when().delete(url);
+            case "OPTIONS":
+                return request.when().options(url);
+            case "HEAD":
+                return request.when().head(url);
+            default:
+                throw new IllegalArgumentException("Unsupported method: " + method);
+        }
+    }
 
-        if (!idsProp.isBlank()) {
-            List<String> ids = Arrays.stream(idsProp.split(","))
-                    .map(String::trim)
-                    .filter(s -> !s.isBlank())
-                    .collect(Collectors.toList());
-
-            return allCases.stream()
-                    .filter(tc -> tc != null && tc.getId() != null && ids.contains(tc.getId().trim()))
-                    .collect(Collectors.toList());
+    private void preApiDbQuery(TestCase testCase, ExtentTest extentTest) {
+        if (testCase.getDbQuery() == null) {
+            return;
         }
 
-        if (!namesProp.isBlank()) {
-            List<String> names = Arrays.stream(namesProp.split(","))
-                    .map(String::trim)
-                    .filter(s -> !s.isBlank())
-                    .collect(Collectors.toList());
+        DBQuery dbQuery = testCase.getDbQuery();
 
-            return allCases.stream()
-                    .filter(tc -> tc != null && tc.getName() != null && names.contains(tc.getName().trim()))
-                    .collect(Collectors.toList());
+        if (dbQuery.getStoreColumnsAs() == null || dbQuery.getStoreColumnsAs().isEmpty()) {
+            return;
         }
 
-        throw new IllegalArgumentException("Provide ids, names, or tcFile");
-    }
+        try {
+            String sql = resolveInlineProperties(dbQuery.getSql());
+            sql = replaceContextValues(sql);
 
-    private String resolveDataFile(TestCase testCase) {
-        String overrideDataFile = System.getProperty("dataFile", "").trim();
-        if (!overrideDataFile.isBlank()) {
-            return overrideDataFile;
+            DBQueryResult dbResult = DBQueryExecutor.execute(dbQuery.getConnection(), sql);
+
+            if (dbResult == null || dbResult.getRows() == null || dbResult.getRows().isEmpty()) {
+                extentTest.fail("DB PRE query returned no rows");
+                return;
+            }
+
+            Map<String, Object> firstRow = dbResult.getRows().get(0);
+
+            for (Map.Entry<String, String> entry : dbQuery.getStoreColumnsAs().entrySet()) {
+                String dbColumn = entry.getKey();
+                String contextKey = entry.getValue();
+
+                Object value = firstRow.get(dbColumn);
+
+                if (value == null) {
+                    for (Map.Entry<String, Object> rowEntry : firstRow.entrySet()) {
+                        if (rowEntry.getKey().equalsIgnoreCase(dbColumn)) {
+                            value = rowEntry.getValue();
+                            break;
+                        }
+                    }
+                }
+
+                String finalValue = value == null ? "" : value.toString();
+                ExecutionContext.put(contextKey, finalValue);
+                extentTest.info("Stored in context: " + contextKey + " = " + finalValue);
+            }
+        } catch (Exception e) {
+            extentTest.fail("DB PRE query failed: " + e.getMessage());
+            throw new RuntimeException("DB PRE query failed", e);
         }
-        return testCase.getDataFile();
     }
 
-    private String resolveDelimiter(TestCase testCase) {
-        String overrideDelimiter = System.getProperty("delimiter", "").trim();
-        if (!overrideDelimiter.isBlank()) {
-            return overrideDelimiter;
-        }
-
-        String tcDelimiter = testCase.getDelimiter();
-        return (tcDelimiter == null || tcDelimiter.isBlank()) ? "," : tcDelimiter;
-    }
-
-    private boolean isLoopEnabled(TestCase testCase) {
-        Object value = testCase.getLoopEnabled();
-        return value != null && "true".equalsIgnoreCase(String.valueOf(value).trim());
-    }
-
-    private void executeLoopIteration(TestCase testCase, Map<String, String> record, int iteration, String resolvedDataFile) {
-        ExecutionContext.clear();
-        ExecutionContext.put("iteration", String.valueOf(iteration));
-        ExecutionContext.put("runtimeDataFile", safe(resolvedDataFile));
-        record.forEach(ExecutionContext::put);
-
-        ExecutionResult result = engine.execute(testCase);
-        ExecutionResultStore.add(result);
-        SummaryTracker.addResult(result);
-
-        Assertions.assertEquals(
-                "PASS",
-                safe(result.getStatus()).toUpperCase(),
-                "Test failed for " + safe(testCase.getId()) + " iteration " + iteration
-        );
-    }
-
-    private void executeSingle(TestCase testCase, String resolvedDataFile) {
-        ExecutionContext.put("iteration", "1");
-
-        if (resolvedDataFile != null && !resolvedDataFile.isBlank()) {
-            ExecutionContext.put("runtimeDataFile", resolvedDataFile);
+    private void postApiDbValidation(TestCase testCase,
+                                     Response response,
+                                     ExecutionResult result,
+                                     ExtentTest extentTest) {
+        if (testCase.getDbQuery() == null) {
+            return;
         }
 
-        System.out.println("Before executing " + safe(testCase.getId()) + " context = " + ExecutionContext.getAll());
+        DBQuery dbQuery = testCase.getDbQuery();
 
-        ExecutionResult result = engine.execute(testCase);
-        ExecutionResultStore.add(result);
-        SummaryTracker.addResult(result);
+        if ((dbQuery.getCompareColumn() == null || dbQuery.getCompareColumn().isBlank()) &&
+                (dbQuery.getExpectedResponseXPath() == null || dbQuery.getExpectedResponseXPath().isBlank()) &&
+                (dbQuery.getExpectedResponseJsonPath() == null || dbQuery.getExpectedResponseJsonPath().isBlank())) {
+            return;
+        }
 
-        System.out.println("After executing " + safe(testCase.getId()) + " context = " + ExecutionContext.getAll());
+        try {
+            String sql = resolveInlineProperties(dbQuery.getSql());
+            sql = replaceContextValues(sql);
 
-        Assertions.assertEquals(
-                "PASS",
-                safe(result.getStatus()).toUpperCase(),
-                "Single test failed: " + safe(testCase.getId())
-        );
+            DBQueryResult dbResult = DBQueryExecutor.execute(dbQuery.getConnection(), sql);
+
+            String dbValue = null;
+
+            if (dbResult != null && dbResult.getRows() != null && !dbResult.getRows().isEmpty()) {
+                Map<String, Object> firstRow = dbResult.getRows().get(0);
+
+                if (dbQuery.getCompareColumn() != null && !dbQuery.getCompareColumn().isBlank()) {
+                    Object value = firstRow.get(dbQuery.getCompareColumn());
+
+                    if (value == null) {
+                        for (Map.Entry<String, Object> rowEntry : firstRow.entrySet()) {
+                            if (rowEntry.getKey().equalsIgnoreCase(dbQuery.getCompareColumn())) {
+                                value = rowEntry.getValue();
+                                break;
+                            }
+                        }
+                    }
+
+                    dbValue = normalize(value == null ? null : value.toString());
+                }
+            }
+
+            String apiValue = null;
+            String responseBody = response.getBody().asString();
+
+            if (dbQuery.getExpectedResponseXPath() != null && !dbQuery.getExpectedResponseXPath().isBlank()) {
+                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                factory.setNamespaceAware(false);
+
+                Document doc = factory.newDocumentBuilder()
+                        .parse(new InputSource(new StringReader(responseBody)));
+
+                XPath xpath = XPathFactory.newInstance().newXPath();
+                apiValue = xpath.evaluate(dbQuery.getExpectedResponseXPath(), doc);
+                apiValue = normalize(apiValue);
+            }
+
+            String expectedRaw = safe(dbValue);
+            String actualRaw = safe(apiValue);
+
+            String expectedNormalized = normalize(expectedRaw);
+            String actualNormalized = normalize(actualRaw);
+
+            if (Objects.equals(expectedNormalized, actualNormalized)) {
+                extentTest.pass("DB Validation Passed");
+                result.getValidationDetails().add(new ValidationDetail(
+                        "DB",
+                        safe(dbQuery.getCompareColumn()),
+                        expectedRaw,
+                        actualRaw,
+                        "PASS"
+                ));
+            } else {
+                extentTest.fail("DB Validation Failed");
+                finalStatus = "FAIL";
+                result.getValidationDetails().add(new ValidationDetail(
+                        "DB",
+                        safe(dbQuery.getCompareColumn()),
+                        expectedRaw,
+                        actualRaw,
+                        "FAIL"
+                ));
+            }
+        } catch (Exception e) {
+            extentTest.fail("DB Validation Error: " + e.getMessage());
+        }
     }
 
-    @AfterAll
-    public static void afterAll() {
-        SummaryTracker.endSuite();
-        SummaryTracker.printSummary(
-                System.getProperty("project", FrameworkConfig.projectName()),
-                System.getProperty("env", FrameworkConfig.env())
-        );
+    private void applyExtractions(TestCase testCase,
+                                  Response response,
+                                  ExecutionResult result,
+                                  ExtentTest extentTest) {
+        List<ExtractionRule> extractions = testCase.getExtractions();
+        if (extractions == null || extractions.isEmpty()) {
+            return;
+        }
 
-        ExtentReportManager.flush();
+        String responseBody = response.getBody() == null ? "" : response.getBody().asString();
+        boolean looksLikeXml = responseBody.trim().startsWith("<");
 
-        String reportPath = ExtentReportManager.getReportFilePath();
-        System.out.println("=======================================");
-        System.out.println("EXTENT REPORT GENERATED AT:");
-        System.out.println(reportPath);
-        System.out.println("file:///" + reportPath.replace("\\", "/"));
-        System.out.println("=======================================");
+        for (ExtractionRule ex : extractions) {
+            if (ex == null || ex.getKey() == null) {
+                continue;
+            }
 
-        ExtentReportManager.openReport();
+            Object value = null;
+
+            try {
+                if (ex.getJsonPath() != null && !ex.getJsonPath().isBlank()) {
+                    value = response.jsonPath().get(ex.getJsonPath());
+                } else if (looksLikeXml && ex.getXpath() != null && !ex.getXpath().isBlank()) {
+                    DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                    factory.setNamespaceAware(false);
+
+                    Document doc = factory.newDocumentBuilder()
+                            .parse(new InputSource(new StringReader(responseBody)));
+
+                    XPath xpath = XPathFactory.newInstance().newXPath();
+                    value = xpath.evaluate(ex.getXpath(), doc);
+                }
+            } catch (Exception ignored) {
+            }
+
+            String finalValue = value == null ? "" : value.toString();
+
+            result.getExtractedValues().put(ex.getKey(), finalValue);
+            ExecutionContext.put(ex.getKey(), finalValue);
+
+            System.out.println("==== EXTRACTION DEBUG ====");
+            System.out.println("Key: " + ex.getKey() + " Value: " + finalValue);
+            System.out.println("Context Now: " + ExecutionContext.getAll());
+
+            extentTest.info("Extracted: " + ex.getKey() + " = " + finalValue);
+        }
     }
 
-    private static String safe(String value) {
+    private String applyPayloadData(String template, Map<String, String> payloadData) {
+        if (template == null || payloadData == null || payloadData.isEmpty()) {
+            return template;
+        }
+
+        String resolved = template;
+
+        for (Map.Entry<String, String> entry : payloadData.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue() == null ? "" : entry.getValue();
+            resolved = resolved.replace("${" + key + "}", value);
+        }
+
+        return resolved;
+    }
+
+    private String replaceContextValues(String text) {
+        if (text == null || text.isBlank()) {
+            return text;
+        }
+
+        String resolved = text;
+        int guard = 0;
+
+        while (guard < 500) {
+            int start = resolved.indexOf("${");
+            if (start < 0) {
+                break;
+            }
+
+            int end = resolved.indexOf("}", start);
+            if (end < 0) {
+                break;
+            }
+
+            String key = resolved.substring(start + 2, end).trim();
+            Object ctxValue = ExecutionContext.get(key);
+            String value = ctxValue == null ? "" : String.valueOf(ctxValue);
+
+            resolved = resolved.substring(0, start) + value + resolved.substring(end + 1);
+            guard++;
+        }
+
+        return resolved;
+    }
+
+    private String resolveInlineProperties(String text) {
+        if (text == null || text.isBlank()) {
+            return text;
+        }
+
+        String resolved = text;
+        int guard = 0;
+
+        while (guard < 200) {
+            int start = resolved.indexOf("${");
+            if (start < 0) {
+                break;
+            }
+
+            int end = resolved.indexOf("}", start);
+            if (end < 0) {
+                break;
+            }
+
+            String key = resolved.substring(start + 2, end).trim();
+            String value = FrameworkConfig.getProperty(key);
+
+            if (value != null) {
+                resolved = resolved.substring(0, start) + value + resolved.substring(end + 1);
+            } else {
+                break;
+            }
+
+            guard++;
+        }
+
+        return resolved;
+    }
+
+    private String escapeHtml(String text) {
+        if (text == null) {
+            return "";
+        }
+
+        return text.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;");
+    }
+
+    private String normalize(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        return value
+                .replace('\u00A0', ' ')
+                .replaceAll("[\\u200B-\\u200D\\uFEFF]", "")
+                .replaceAll("[\\r\\n\\t]+", " ")
+                .replaceAll("\\s+", " ")
+                .trim()
+                .toLowerCase();
+    }
+
+    private String safe(String value) {
         return value == null ? "" : value.trim();
     }
 }
