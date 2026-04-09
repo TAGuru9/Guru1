@@ -1,6 +1,5 @@
 package com.acfc.automation.report;
 
-import com.acfc.automation.config.FrameworkConfig;
 import com.aventstack.extentreports.ExtentReports;
 import com.aventstack.extentreports.ExtentTest;
 import com.aventstack.extentreports.reporter.ExtentSparkReporter;
@@ -22,41 +21,56 @@ public class ExtentReportManager {
     private ExtentReportManager() {
     }
 
-    public static synchronized ExtentReports getInstance() {
-        if (extent == null) {
-            try {
-                String project = safe(System.getProperty("project", FrameworkConfig.projectName()));
-                String suite = safe(System.getProperty("suite", "NA"));
-                String type = safe(System.getProperty("type", "NA"));
-                String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-
-                Path reportDir = Paths.get(project, "build", "reports", "extent", suite, type);
-                Files.createDirectories(reportDir);
-
-                String fileName = project + "_" + suite + "_" + type + "_" + timestamp + ".html";
-                Path reportPath = reportDir.resolve(fileName);
-
-                reportFilePath = reportPath.toAbsolutePath().toString();
-
-                ExtentSparkReporter spark = new ExtentSparkReporter(reportFilePath);
-                spark.config().setReportName(project + " Execution Report");
-                spark.config().setDocumentTitle(project + " Extent Report");
-
-                extent = new ExtentReports();
-                extent.attachReporter(spark);
-
-                extent.setSystemInfo("Project", project);
-                extent.setSystemInfo("Environment", safe(System.getProperty("env", FrameworkConfig.env())));
-                extent.setSystemInfo("Suite", suite);
-                extent.setSystemInfo("Type", type);
-
-                System.out.println("Extent report path: " + reportFilePath);
-
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to initialize extent report", e);
-            }
+    public static synchronized void initReport(String project, String suite, String type) {
+        if (extent != null) {
+            return;
         }
 
+        try {
+            String safeProject = safe(project);
+            String safeSuite = safe(suite);
+            String safeType = safe(type);
+
+            String timestamp = LocalDateTime.now()
+                    .format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+
+            Path reportDir = Paths.get(
+                    safeProject,
+                    "build",
+                    "reports",
+                    "extent",
+                    safeSuite,
+                    safeType
+            );
+
+            Files.createDirectories(reportDir);
+
+            String fileName = safeProject + "_" + safeSuite + "_" + safeType + "_" + timestamp + ".html";
+            Path reportPath = reportDir.resolve(fileName);
+
+            reportFilePath = reportPath.toAbsolutePath().toString();
+
+            ExtentSparkReporter spark = new ExtentSparkReporter(reportFilePath);
+            spark.config().setReportName(safeProject + " Execution Report");
+            spark.config().setDocumentTitle(safeProject + " Extent Report");
+
+            extent = new ExtentReports();
+            extent.attachReporter(spark);
+
+            extent.setSystemInfo("Project", safeProject);
+            extent.setSystemInfo("Suite", safeSuite);
+            extent.setSystemInfo("Type", safeType);
+
+            System.out.println("Extent report path: " + reportFilePath);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to initialize extent report", e);
+        }
+    }
+
+    public static synchronized ExtentReports getInstance() {
+        if (extent == null) {
+            initReport("NA", "NA", "NA");
+        }
         return extent;
     }
 
@@ -96,9 +110,6 @@ public class ExtentReportManager {
     }
 
     private static String safe(String value) {
-        if (value == null || value.trim().isBlank()) {
-            return "NA";
-        }
-        return value.trim();
+        return (value == null || value.trim().isBlank()) ? "NA" : value.trim();
     }
 }
