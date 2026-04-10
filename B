@@ -1,0 +1,24 @@
+To help with planning, here’s how we are approaching API automation:
+
+Execution model
+	•	We are using a data-driven approach, where a single API script can execute multiple scenarios using CSV inputs
+	•	This allows us to cover multiple business combinations without creating separate scripts
+
+Effort estimation
+	•	Initial scripts may take ~4–6 hours as we set up patterns and validations
+	•	Once a few APIs are established, we can reduce effort to ~2 hours per API script, leveraging reuse and framework acceleration
+	•	Additional scenarios can be covered with minimal effort through data-driven inputs
+
+Coverage plan
+	•	Initial smoke coverage within 1–2 days
+	•	Followed by rapid expansion, onboarding multiple APIs per day based on complexity
+
+To accelerate further, it would help to have:
+	•	Key scenario combinations (happy path, negative, business rules)
+	•	Test data (CSV/Excel with different input combinations)
+	•	Expected results / validation rules (including DB checks if needed)
+	•	Priority APIs for initial coverage
+
+With this model, we can scale quickly by maximizing reuse while expanding coverage efficiently.
+
+I’ll align on priorities and ensure we focus on the most critical APIs first.
