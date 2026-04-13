@@ -1,73 +1,57 @@
 package com.acfc.automation.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-
-import java.util.List;
 import java.util.Map;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
-public class TestCase {
+public class DBQuery {
 
-    private String id;
-    private String name;
-    private String type;
-    private String suite;
-    private String project;
-    private String method;
-    private String baseUrlProperty;
-    private String endpoint;
-    private Map<String, String> headers;
+    private String connection;
+    private String connectionName;
+    private String sql;
+    private Map<String, String> params;
+    private Map<String, String> storeColumnsAs;
+    private String compareColumn;
+    private String expectedResponseXPath;
+    private String expectedResponseJsonPath;
+    private Map<String, String> validateColumnsAgainstResponse;
+    private String resultKey;
 
-    private Boolean enabled;
-    private Object loopEnabled;
-    private String dataSourceType;
-    private String dataFile;
-    private String delimiter;
-    private String txtValueField;
-    private String payloadFile;
-    private Map<String, String> payloadData;
+    public String getConnection() {
+        return connection;
+    }
 
-    private Integer expectedStatus;
-    private String expectedStatusField;
-    private String expectedMessageField;
-    private String scenarioTypeField;
+    public String getConnectionName() {
+        return connectionName != null && !connectionName.isBlank() ? connectionName : connection;
+    }
 
-    private List<Map<String, String>> inlineRows;
-    private List<Map<String, String>> parameterSets;
+    public String getSql() {
+        return sql;
+    }
 
-    private List<ExtractionRule> extractions;
-    private List<String> expectedBodyContains;
-    private Map<String, String> expectedBodyXpaths;
+    public Map<String, String> getParams() {
+        return params;
+    }
 
-    private DBQuery query;
-    private List<FileVsResponseComparison> compareFileVsResponse;
+    public Map<String, String> getStoreColumnsAs() {
+        return storeColumnsAs;
+    }
 
-    public String getId() { return id; }
-    public String getName() { return name; }
-    public String getType() { return type; }
-    public String getSuite() { return suite; }
-    public String getProject() { return project; }
-    public String getMethod() { return method; }
-    public String getBaseUrlProperty() { return baseUrlProperty; }
-    public String getEndpoint() { return endpoint; }
-    public Map<String, String> getHeaders() { return headers; }
-    public Boolean getEnabled() { return enabled; }
-    public Object getLoopEnabled() { return loopEnabled; }
-    public String getDataSourceType() { return dataSourceType; }
-    public String getDataFile() { return dataFile; }
-    public String getDelimiter() { return delimiter; }
-    public String getTxtValueField() { return txtValueField; }
-    public String getPayloadFile() { return payloadFile; }
-    public Map<String, String> getPayloadData() { return payloadData; }
-    public Integer getExpectedStatus() { return expectedStatus; }
-    public String getExpectedStatusField() { return expectedStatusField; }
-    public String getExpectedMessageField() { return expectedMessageField; }
-    public String getScenarioTypeField() { return scenarioTypeField; }
-    public List<Map<String, String>> getInlineRows() { return inlineRows; }
-    public List<Map<String, String>> getParameterSets() { return parameterSets; }
-    public List<ExtractionRule> getExtractions() { return extractions; }
-    public List<String> getExpectedBodyContains() { return expectedBodyContains; }
-    public Map<String, String> getExpectedBodyXpaths() { return expectedBodyXpaths; }
-    public DBQuery getQuery() { return query; }
-    public List<FileVsResponseComparison> getCompareFileVsResponse() { return compareFileVsResponse; }
+    public String getCompareColumn() {
+        return compareColumn;
+    }
+
+    public String getExpectedResponseXPath() {
+        return expectedResponseXPath;
+    }
+
+    public String getExpectedResponseJsonPath() {
+        return expectedResponseJsonPath;
+    }
+
+    public Map<String, String> getValidateColumnsAgainstResponse() {
+        return validateColumnsAgainstResponse;
+    }
+
+    public String getResultKey() {
+        return resultKey;
+    }
 }
