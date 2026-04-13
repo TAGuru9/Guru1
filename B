@@ -1,57 +1,11 @@
 package com.acfc.automation.model;
 
-import java.util.Map;
+public class ExtractionRule {
+    private String key;
+    private String xpath;
+    private String jsonPath;
 
-public class DBQuery {
-
-    private String connection;
-    private String connectionName;
-    private String sql;
-    private Map<String, String> params;
-    private Map<String, String> storeColumnsAs;
-    private String compareColumn;
-    private String expectedResponseXPath;
-    private String expectedResponseJsonPath;
-    private Map<String, String> validateColumnsAgainstResponse;
-    private String resultKey;
-
-    public String getConnection() {
-        return connection;
-    }
-
-    public String getConnectionName() {
-        return connectionName != null && !connectionName.isBlank() ? connectionName : connection;
-    }
-
-    public String getSql() {
-        return sql;
-    }
-
-    public Map<String, String> getParams() {
-        return params;
-    }
-
-    public Map<String, String> getStoreColumnsAs() {
-        return storeColumnsAs;
-    }
-
-    public String getCompareColumn() {
-        return compareColumn;
-    }
-
-    public String getExpectedResponseXPath() {
-        return expectedResponseXPath;
-    }
-
-    public String getExpectedResponseJsonPath() {
-        return expectedResponseJsonPath;
-    }
-
-    public Map<String, String> getValidateColumnsAgainstResponse() {
-        return validateColumnsAgainstResponse;
-    }
-
-    public String getResultKey() {
-        return resultKey;
-    }
+    public String getKey() { return key; }
+    public String getXpath() { return xpath; }
+    public String getJsonPath() { return jsonPath; }
 }
