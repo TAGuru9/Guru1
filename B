@@ -1,11 +1,11 @@
 package com.acfc.automation.model;
 
-public class ExtractionRule {
-    private String key;
-    private String xpath;
-    private String jsonPath;
+public class FileVsResponseComparison {
+    private String fileField;
+    private String responseKey;
+    private String comparison;
 
-    public String getKey() { return key; }
-    public String getXpath() { return xpath; }
-    public String getJsonPath() { return jsonPath; }
+    public String getFileField() { return fileField; }
+    public String getResponseKey() { return responseKey; }
+    public String getComparison() { return comparison; }
 }
