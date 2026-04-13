@@ -1,21 +1,17 @@
-private int getExpectedStatus(TestCase testCase, Map<String, String> currentRow) {
+private String getExpectedMessage(TestCase testCase, Map<String, String> currentRow) {
 
-    if (testCase.getExpectedStatusField() != null &&
-        !testCase.getExpectedStatusField().isBlank()) {
+    if (testCase.getExpectedMessageField() != null &&
+        !testCase.getExpectedMessageField().isBlank()) {
 
-        String value = currentRow.get(testCase.getExpectedStatusField());
-
-        if (value == null || value.isBlank()) {
-            throw new RuntimeException("Missing expected status in CSV column: "
-                    + testCase.getExpectedStatusField());
-        }
-
-        return Integer.parseInt(value.trim());
+        String value = currentRow.get(testCase.getExpectedMessageField());
+        return value == null ? "" : value.trim();
     }
 
-    if (testCase.getExpectedStatus() != null) {
-        return testCase.getExpectedStatus();
+    if (testCase.getExpectedBodyContains() != null &&
+        !testCase.getExpectedBodyContains().isEmpty()) {
+
+        return testCase.getExpectedBodyContains().get(0);
     }
 
-    return 200; // default fallback
+    return "";
 }
