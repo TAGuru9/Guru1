@@ -1,93 +1,73 @@
 package com.acfc.automation.model;
 
-import java.util.ArrayList;
-import java.util.HashMap;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.util.List;
 import java.util.Map;
 
-public class ExecutionResult {
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class TestCase {
 
-    private final Map<String, Object> extractedValues = new HashMap<>();
-    private final List<Object> validationDetails = new ArrayList<>();
+    private String id;
+    private String name;
+    private String type;
+    private String suite;
+    private String project;
+    private String method;
+    private String baseUrlProperty;
+    private String endpoint;
+    private Map<String, String> headers;
 
-    private final String project;
-    private final String id;
-    private final String name;
-    private final String method;
-    private final String type;
-    private final String suite;
-    private final int expectedStatus;
-    private final int actualStatus;
-    private final String status;
-    private final long durationMs;
+    private Boolean enabled;
+    private Object loopEnabled;
+    private String dataSourceType;
+    private String dataFile;
+    private String delimiter;
+    private String txtValueField;
+    private String payloadFile;
+    private Map<String, String> payloadData;
 
-    public ExecutionResult(String project,
-                           String id,
-                           String name,
-                           String method,
-                           String type,
-                           String suite,
-                           int expectedStatus,
-                           int actualStatus,
-                           String status,
-                           long durationMs) {
-        this.project = project;
-        this.id = id;
-        this.name = name;
-        this.method = method;
-        this.type = type;
-        this.suite = suite;
-        this.expectedStatus = expectedStatus;
-        this.actualStatus = actualStatus;
-        this.status = status;
-        this.durationMs = durationMs;
-    }
+    private Integer expectedStatus;
+    private String expectedStatusField;
+    private String expectedMessageField;
+    private String scenarioTypeField;
 
-    public String getProject() {
-        return project;
-    }
+    private List<Map<String, String>> inlineRows;
+    private List<Map<String, String>> parameterSets;
 
-    public String getId() {
-        return id;
-    }
+    private List<ExtractionRule> extractions;
+    private List<String> expectedBodyContains;
+    private Map<String, String> expectedBodyXpaths;
 
-    public String getName() {
-        return name;
-    }
+    private DBQuery query;
+    private List<FileVsResponseComparison> compareFileVsResponse;
 
-    public String getMethod() {
-        return method;
-    }
-
-    public String getType() {
-        return type;
-    }
-
-    public String getSuite() {
-        return suite;
-    }
-
-    public int getExpectedStatus() {
-        return expectedStatus;
-    }
-
-    public int getActualStatus() {
-        return actualStatus;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public long getDurationMs() {
-        return durationMs;
-    }
-
-    public Map<String, Object> getExtractedValues() {
-        return extractedValues;
-    }
-
-    public List<Object> getValidationDetails() {
-        return validationDetails;
-    }
+    public String getId() { return id; }
+    public String getName() { return name; }
+    public String getType() { return type; }
+    public String getSuite() { return suite; }
+    public String getProject() { return project; }
+    public String getMethod() { return method; }
+    public String getBaseUrlProperty() { return baseUrlProperty; }
+    public String getEndpoint() { return endpoint; }
+    public Map<String, String> getHeaders() { return headers; }
+    public Boolean getEnabled() { return enabled; }
+    public Object getLoopEnabled() { return loopEnabled; }
+    public String getDataSourceType() { return dataSourceType; }
+    public String getDataFile() { return dataFile; }
+    public String getDelimiter() { return delimiter; }
+    public String getTxtValueField() { return txtValueField; }
+    public String getPayloadFile() { return payloadFile; }
+    public Map<String, String> getPayloadData() { return payloadData; }
+    public Integer getExpectedStatus() { return expectedStatus; }
+    public String getExpectedStatusField() { return expectedStatusField; }
+    public String getExpectedMessageField() { return expectedMessageField; }
+    public String getScenarioTypeField() { return scenarioTypeField; }
+    public List<Map<String, String>> getInlineRows() { return inlineRows; }
+    public List<Map<String, String>> getParameterSets() { return parameterSets; }
+    public List<ExtractionRule> getExtractions() { return extractions; }
+    public List<String> getExpectedBodyContains() { return expectedBodyContains; }
+    public Map<String, String> getExpectedBodyXpaths() { return expectedBodyXpaths; }
+    public DBQuery getQuery() { return query; }
+    public List<FileVsResponseComparison> getCompareFileVsResponse() { return compareFileVsResponse; }
 }
