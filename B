@@ -1,71 +1,631 @@
-package com.acfc.automation.model;
+package com.acfc.automation.engine;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.acfc.automation.model.DBQuery;
+import com.acfc.automation.model.ExtractionRule;
+import com.acfc.automation.model.FileVsResponseComparison;
+import com.acfc.automation.model.TestCase;
+import io.restassured.RestAssured;
+import io.restassured.path.json.JsonPath;
+import io.restassured.response.Response;
+import io.restassured.specification.RequestSpecification;
+import org.w3c.dom.Document;
+import org.xml.sax.InputSource;
 
-import java.util.List;
-import java.util.Map;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathFactory;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.sql.*;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
-public class TestCase {
+public class ApiExecutionEngine {
 
-    private String id;
-    private String name;
-    private String type;
-    private String suite;
-    private String project;
-    private String method;
-    private String baseUrlProperty;
-    private String endpoint;
-    private Map<String, String> headers;
+    public void execute(TestCase testCase) {
+        validateTestCase(testCase);
 
-    private Boolean loopEnabled;
-    private String dataSourceType;          // CSV | TXT | INLINE | PARAMETERIZED | DB | NONE
-    private String dataFile;
-    private String delimiter;
-    private String txtValueField;           // for single-column txt rows
-    private String payloadFile;
-    private Map<String, String> payloadData;
+        List<Map<String, String>> rows = resolveRows(testCase);
+        if (rows.isEmpty()) {
+            rows = List.of(new LinkedHashMap<>());
+        }
 
-    private Integer expectedStatus;
-    private String expectedStatusField;     // ex: Status Code
-    private String expectedMessageField;    // ex: Expected Message
-    private String scenarioTypeField;       // ex: ScenarioType
+        int passed = 0;
+        int failed = 0;
+        int iteration = 0;
 
-    private List<Map<String, String>> inlineRows;
-    private List<Map<String, String>> parameterSets;
+        System.out.println("==================================================");
+        System.out.println("Starting Test Case: " + safe(testCase.getId()) + " - " + safe(testCase.getName()));
+        System.out.println("Data Source Type  : " + safe(testCase.getDataSourceType()));
+        System.out.println("Rows to Execute   : " + rows.size());
+        System.out.println("==================================================");
 
-    private List<ExtractionRule> extractions;
-    private List<String> expectedBodyContains;
-    private Map<String, String> expectedBodyXpaths;
+        for (Map<String, String> currentRow : rows) {
+            iteration++;
+            try {
+                executeSingleRow(testCase, currentRow, iteration);
+                passed++;
+            } catch (Exception e) {
+                failed++;
+                System.out.println("--------------------------------------------------");
+                System.out.println("Iteration " + iteration + " FAILED");
+                System.out.println("Row Data : " + currentRow);
+                System.out.println("Reason   : " + e.getMessage());
+                e.printStackTrace(System.out);
+                System.out.println("--------------------------------------------------");
+            }
+        }
 
-    private DBQuery query;
-    private List<FileVsResponseComparison> compareFileVsResponse;
+        System.out.println("==================================================");
+        System.out.println("Execution Summary");
+        System.out.println("Passed : " + passed);
+        System.out.println("Failed : " + failed);
+        System.out.println("==================================================");
 
-    public String getId() { return id; }
-    public String getName() { return name; }
-    public String getType() { return type; }
-    public String getSuite() { return suite; }
-    public String getProject() { return project; }
-    public String getMethod() { return method; }
-    public String getBaseUrlProperty() { return baseUrlProperty; }
-    public String getEndpoint() { return endpoint; }
-    public Map<String, String> getHeaders() { return headers; }
-    public Boolean getLoopEnabled() { return loopEnabled; }
-    public String getDataSourceType() { return dataSourceType; }
-    public String getDataFile() { return dataFile; }
-    public String getDelimiter() { return delimiter; }
-    public String getTxtValueField() { return txtValueField; }
-    public String getPayloadFile() { return payloadFile; }
-    public Map<String, String> getPayloadData() { return payloadData; }
-    public Integer getExpectedStatus() { return expectedStatus; }
-    public String getExpectedStatusField() { return expectedStatusField; }
-    public String getExpectedMessageField() { return expectedMessageField; }
-    public String getScenarioTypeField() { return scenarioTypeField; }
-    public List<Map<String, String>> getInlineRows() { return inlineRows; }
-    public List<Map<String, String>> getParameterSets() { return parameterSets; }
-    public List<ExtractionRule> getExtractions() { return extractions; }
-    public List<String> getExpectedBodyContains() { return expectedBodyContains; }
-    public Map<String, String> getExpectedBodyXpaths() { return expectedBodyXpaths; }
-    public DBQuery getQuery() { return query; }
-    public List<FileVsResponseComparison> getCompareFileVsResponse() { return compareFileVsResponse; }
+        if (failed > 0) {
+            throw new AssertionError("Execution completed with failures. Passed=" + passed + ", Failed=" + failed);
+        }
+    }
+
+    private void executeSingleRow(TestCase testCase, Map<String, String> currentRow, int iteration) throws Exception {
+        String baseUrl = getBaseUrl(testCase);
+        String endpoint = resolveText(defaultString(testCase.getEndpoint()), currentRow, testCase.getPayloadData());
+        String url = baseUrl + endpoint;
+
+        String requestBody = buildRequestBody(testCase, currentRow);
+        Map<String, String> resolvedHeaders = buildHeaders(testCase, currentRow);
+
+        int expectedStatus = getExpectedStatus(testCase, currentRow);
+        String expectedMessage = getExpectedMessage(testCase, currentRow);
+        String scenarioType = getScenarioType(testCase, currentRow);
+
+        System.out.println("--------------------------------------------------");
+        System.out.println("Iteration      : " + iteration);
+        System.out.println("Scenario Type  : " + scenarioType);
+        System.out.println("URL            : " + url);
+        System.out.println("ExpectedStatus : " + expectedStatus);
+        System.out.println("ExpectedMsg    : " + expectedMessage);
+        System.out.println("Headers        : " + resolvedHeaders);
+        System.out.println("Current Row    : " + currentRow);
+        System.out.println("Request Body   : ");
+        System.out.println(requestBody);
+
+        Response response = sendRequest(testCase.getMethod(), url, resolvedHeaders, requestBody);
+
+        int actualStatus = response.getStatusCode();
+        String responseBody = response.getBody() == null ? "" : response.getBody().asString();
+
+        System.out.println("Actual Status  : " + actualStatus);
+        System.out.println("Response Body  : ");
+        System.out.println(responseBody);
+
+        validateStatus(expectedStatus, actualStatus, currentRow);
+        validateExpectedMessage(expectedMessage, responseBody, currentRow);
+        validateExpectedBodyContains(testCase, responseBody);
+        validateExpectedBodyXpaths(testCase, responseBody, currentRow);
+
+        Map<String, String> extractedValues = extractResponseValues(testCase, responseBody);
+        if (!extractedValues.isEmpty()) {
+            System.out.println("Extracted Values: " + extractedValues);
+        }
+
+        validateFileVsResponse(testCase, currentRow, extractedValues);
+
+        System.out.println("Iteration " + iteration + " PASSED");
+        System.out.println("Manual QA Note: " + buildManualQaMessage(expectedStatus, actualStatus));
+        System.out.println("--------------------------------------------------");
+    }
+
+    private void validateTestCase(TestCase testCase) {
+        if (testCase == null) throw new IllegalArgumentException("TestCase cannot be null");
+        if (isBlank(testCase.getMethod())) throw new IllegalArgumentException("HTTP method is required");
+        if (isBlank(testCase.getBaseUrlProperty())) throw new IllegalArgumentException("baseUrlProperty is required");
+    }
+
+    private List<Map<String, String>> resolveRows(TestCase testCase) {
+        String type = upper(defaultIfBlank(testCase.getDataSourceType(), inferDataSourceType(testCase)));
+
+        switch (type) {
+            case "CSV":
+                return readCsv(testCase.getDataFile(), defaultIfBlank(testCase.getDelimiter(), ","));
+            case "TXT":
+                return readTxt(testCase.getDataFile(), defaultIfBlank(testCase.getTxtValueField(), "value"));
+            case "INLINE":
+            case "HARDCODED":
+                return safeRows(testCase.getInlineRows());
+            case "PARAMETERIZED":
+                return safeRows(testCase.getParameterSets());
+            case "DB":
+                return readFromDb(testCase.getQuery());
+            case "NONE":
+            default:
+                return new ArrayList<>();
+        }
+    }
+
+    private String inferDataSourceType(TestCase testCase) {
+        if (testCase.getInlineRows() != null && !testCase.getInlineRows().isEmpty()) return "INLINE";
+        if (testCase.getParameterSets() != null && !testCase.getParameterSets().isEmpty()) return "PARAMETERIZED";
+        if (testCase.getQuery() != null) return "DB";
+        if (!isBlank(testCase.getDataFile())) {
+            String file = testCase.getDataFile().toLowerCase(Locale.ROOT);
+            if (file.endsWith(".csv")) return "CSV";
+            if (file.endsWith(".txt")) return "TXT";
+        }
+        return "NONE";
+    }
+
+    private List<Map<String, String>> safeRows(List<Map<String, String>> rows) {
+        return rows == null ? new ArrayList<>() : rows;
+    }
+
+    private List<Map<String, String>> readCsv(String filePath, String delimiter) {
+        if (isBlank(filePath)) {
+            throw new IllegalArgumentException("CSV dataFile is missing");
+        }
+
+        try (BufferedReader br = Files.newBufferedReader(Paths.get(filePath), StandardCharsets.UTF_8)) {
+            List<String> lines = br.lines()
+                    .filter(line -> line != null && !line.trim().isEmpty())
+                    .collect(Collectors.toList());
+
+            if (lines.isEmpty()) return new ArrayList<>();
+
+            String[] headers = splitPreserveEmpty(lines.get(0), delimiter);
+
+            List<Map<String, String>> rows = new ArrayList<>();
+            for (int i = 1; i < lines.size(); i++) {
+                String[] values = splitPreserveEmpty(lines.get(i), delimiter);
+                Map<String, String> row = new LinkedHashMap<>();
+                for (int j = 0; j < headers.length; j++) {
+                    String key = clean(headers[j]);
+                    String value = j < values.length ? clean(values[j]) : "";
+                    row.put(key, value);
+                }
+                rows.add(row);
+            }
+            return rows;
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read CSV file: " + filePath, e);
+        }
+    }
+
+    private String[] splitPreserveEmpty(String line, String delimiter) {
+        return line.split(Pattern.quote(delimiter), -1);
+    }
+
+    private List<Map<String, String>> readTxt(String filePath, String txtValueField) {
+        if (isBlank(filePath)) {
+            throw new IllegalArgumentException("TXT dataFile is missing");
+        }
+
+        try {
+            List<String> lines = Files.readAllLines(Paths.get(filePath), StandardCharsets.UTF_8);
+            List<Map<String, String>> rows = new ArrayList<>();
+
+            List<String> nonEmpty = lines.stream()
+                    .filter(line -> line != null && !line.trim().isEmpty())
+                    .collect(Collectors.toList());
+
+            boolean hasKeyValue = nonEmpty.stream().anyMatch(line -> line.contains("="));
+
+            if (hasKeyValue) {
+                Map<String, String> current = new LinkedHashMap<>();
+                for (String raw : lines) {
+                    String line = raw == null ? "" : raw.trim();
+                    if (line.isEmpty()) {
+                        if (!current.isEmpty()) {
+                            rows.add(new LinkedHashMap<>(current));
+                            current.clear();
+                        }
+                        continue;
+                    }
+                    int idx = line.indexOf('=');
+                    if (idx > 0) {
+                        String key = line.substring(0, idx).trim();
+                        String value = line.substring(idx + 1).trim();
+                        current.put(key, value);
+                    }
+                }
+                if (!current.isEmpty()) rows.add(current);
+            } else {
+                for (String raw : nonEmpty) {
+                    Map<String, String> row = new LinkedHashMap<>();
+                    row.put(txtValueField, raw.trim());
+                    rows.add(row);
+                }
+            }
+
+            return rows;
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read TXT file: " + filePath, e);
+        }
+    }
+
+    private List<Map<String, String>> readFromDb(DBQuery dbQuery) {
+        if (dbQuery == null || isBlank(dbQuery.getSql())) {
+            throw new IllegalArgumentException("DB query is missing");
+        }
+
+        String jdbcUrl = System.getProperty(dbQuery.getConnectionName(), "");
+        if (isBlank(jdbcUrl)) {
+            jdbcUrl = System.getenv(dbQuery.getConnectionName());
+        }
+        if (isBlank(jdbcUrl)) {
+            throw new IllegalArgumentException("DB connection string not found for key: " + dbQuery.getConnectionName());
+        }
+
+        List<Map<String, String>> rows = new ArrayList<>();
+
+        try (Connection connection = DriverManager.getConnection(jdbcUrl);
+             Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery(dbQuery.getSql())) {
+
+            ResultSetMetaData metaData = rs.getMetaData();
+            int columnCount = metaData.getColumnCount();
+
+            while (rs.next()) {
+                Map<String, String> row = new LinkedHashMap<>();
+                for (int i = 1; i <= columnCount; i++) {
+                    String key = metaData.getColumnLabel(i);
+                    Object value = rs.getObject(i);
+                    row.put(key, value == null ? "" : String.valueOf(value));
+                }
+                rows.add(row);
+            }
+            return rows;
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to read data from DB", e);
+        }
+    }
+
+    private String buildRequestBody(TestCase testCase, Map<String, String> currentRow) {
+        if (!isBlank(testCase.getPayloadFile())) {
+            try {
+                String template = Files.readString(Paths.get(testCase.getPayloadFile()), StandardCharsets.UTF_8);
+                return resolveText(template, currentRow, testCase.getPayloadData());
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to read payload file: " + testCase.getPayloadFile(), e);
+            }
+        }
+
+        if (testCase.getPayloadData() != null && !testCase.getPayloadData().isEmpty()) {
+            return resolveMapAsJsonLike(testCase.getPayloadData(), currentRow);
+        }
+
+        return "";
+    }
+
+    private Map<String, String> buildHeaders(TestCase testCase, Map<String, String> currentRow) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        if (testCase.getHeaders() == null) return headers;
+
+        for (Map.Entry<String, String> entry : testCase.getHeaders().entrySet()) {
+            headers.put(entry.getKey(), resolveText(entry.getValue(), currentRow, testCase.getPayloadData()));
+        }
+        return headers;
+    }
+
+    private Response sendRequest(String method, String url, Map<String, String> headers, String requestBody) {
+        RequestSpecification request = RestAssured.given().relaxedHTTPSValidation().headers(headers);
+
+        if (!isBlank(requestBody)) {
+            request.body(requestBody);
+        }
+
+        switch (upper(method)) {
+            case "GET":
+                return request.when().get(url);
+            case "POST":
+                return request.when().post(url);
+            case "PUT":
+                return request.when().put(url);
+            case "DELETE":
+                return request.when().delete(url);
+            case "PATCH":
+                return request.when().patch(url);
+            case "HEAD":
+                return request.when().head(url);
+            default:
+                throw new IllegalArgumentException("Unsupported HTTP method: " + method);
+        }
+    }
+
+    private int getExpectedStatus(TestCase testCase, Map<String, String> currentRow) {
+        if (!isBlank(testCase.getExpectedStatusField())) {
+            String value = currentRow.get(testCase.getExpectedStatusField());
+            if (isBlank(value)) {
+                throw new IllegalArgumentException("Missing expected status in row column: " + testCase.getExpectedStatusField());
+            }
+            try {
+                return Integer.parseInt(value.trim());
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Invalid expected status value: " + value);
+            }
+        }
+
+        if (testCase.getExpectedStatus() != null) {
+            return testCase.getExpectedStatus();
+        }
+
+        return 200;
+    }
+
+    private String getExpectedMessage(TestCase testCase, Map<String, String> currentRow) {
+        if (!isBlank(testCase.getExpectedMessageField())) {
+            return defaultString(currentRow.get(testCase.getExpectedMessageField())).trim();
+        }
+
+        if (testCase.getExpectedBodyContains() != null && !testCase.getExpectedBodyContains().isEmpty()) {
+            return defaultString(testCase.getExpectedBodyContains().get(0));
+        }
+
+        return "";
+    }
+
+    private String getScenarioType(TestCase testCase, Map<String, String> currentRow) {
+        if (!isBlank(testCase.getScenarioTypeField())) {
+            String value = currentRow.get(testCase.getScenarioTypeField());
+            if (!isBlank(value)) return value.trim();
+        }
+        return defaultIfBlank(testCase.getType(), "positive");
+    }
+
+    private void validateStatus(int expectedStatus, int actualStatus, Map<String, String> currentRow) {
+        if (actualStatus != expectedStatus) {
+            throw new AssertionError(
+                    "Status mismatch. Expected=" + expectedStatus +
+                    ", Actual=" + actualStatus +
+                    ", Row=" + currentRow +
+                    ", Manual QA Guidance=" + buildManualQaMessage(expectedStatus, actualStatus)
+            );
+        }
+    }
+
+    private void validateExpectedMessage(String expectedMessage, String responseBody, Map<String, String> currentRow) {
+        if (isBlank(expectedMessage)) return;
+
+        if (responseBody == null || !responseBody.contains(expectedMessage)) {
+            throw new AssertionError(
+                    "Expected message not found. Expected='" + expectedMessage +
+                    "', Row=" + currentRow
+            );
+        }
+    }
+
+    private void validateExpectedBodyContains(TestCase testCase, String responseBody) {
+        if (testCase.getExpectedBodyContains() == null) return;
+
+        for (String expected : testCase.getExpectedBodyContains()) {
+            if (!isBlank(expected) && (responseBody == null || !responseBody.contains(expected))) {
+                throw new AssertionError("Expected body text not found: " + expected);
+            }
+        }
+    }
+
+    private void validateExpectedBodyXpaths(TestCase testCase, String responseBody, Map<String, String> currentRow) {
+        if (testCase.getExpectedBodyXpaths() == null || testCase.getExpectedBodyXpaths().isEmpty()) {
+            return;
+        }
+
+        boolean xml = looksLikeXml(responseBody);
+        if (!xml) {
+            return;
+        }
+
+        for (Map.Entry<String, String> entry : testCase.getExpectedBodyXpaths().entrySet()) {
+            String xpath = entry.getKey();
+            String expected = resolveText(entry.getValue(), currentRow, testCase.getPayloadData());
+            String actual = extractXmlValue(responseBody, xpath);
+            if (!Objects.equals(defaultString(expected).trim(), defaultString(actual).trim())) {
+                throw new AssertionError(
+                        "XPath validation failed. XPath=" + xpath +
+                        ", Expected=" + expected +
+                        ", Actual=" + actual
+                );
+            }
+        }
+    }
+
+    private Map<String, String> extractResponseValues(TestCase testCase, String responseBody) {
+        Map<String, String> extracted = new LinkedHashMap<>();
+        if (testCase.getExtractions() == null || testCase.getExtractions().isEmpty()) return extracted;
+
+        boolean xml = looksLikeXml(responseBody);
+
+        for (ExtractionRule rule : testCase.getExtractions()) {
+            String value;
+            if (xml && !isBlank(rule.getXpath())) {
+                value = extractXmlValue(responseBody, rule.getXpath());
+            } else if (!xml && !isBlank(rule.getJsonPath())) {
+                value = extractJsonValue(responseBody, rule.getJsonPath());
+            } else {
+                value = "";
+            }
+            extracted.put(rule.getKey(), defaultString(value));
+        }
+
+        return extracted;
+    }
+
+    private void validateFileVsResponse(TestCase testCase, Map<String, String> currentRow, Map<String, String> extractedValues) {
+        if (testCase.getCompareFileVsResponse() == null || testCase.getCompareFileVsResponse().isEmpty()) {
+            return;
+        }
+
+        for (FileVsResponseComparison rule : testCase.getCompareFileVsResponse()) {
+            String expected = defaultString(currentRow.get(rule.getFileField()));
+            String actual = defaultString(extractedValues.get(rule.getResponseKey()));
+
+            boolean passed = compareValues(expected, actual, rule.getComparison());
+            if (!passed) {
+                throw new AssertionError(
+                        "File vs response comparison failed. FileField=" + rule.getFileField() +
+                        ", ResponseKey=" + rule.getResponseKey() +
+                        ", Expected=" + expected +
+                        ", Actual=" + actual +
+                        ", Comparison=" + rule.getComparison()
+                );
+            }
+        }
+    }
+
+    private boolean compareValues(String expected, String actual, String comparisonType) {
+        String comp = defaultIfBlank(comparisonType, "equals").trim().toLowerCase(Locale.ROOT);
+
+        switch (comp) {
+            case "equalsignorecase":
+                return expected.equalsIgnoreCase(actual);
+            case "contains":
+                return actual.contains(expected);
+            case "startswith":
+                return actual.startsWith(expected);
+            case "endswith":
+                return actual.endsWith(expected);
+            case "equals":
+            default:
+                return expected.equals(actual);
+        }
+    }
+
+    private String extractXmlValue(String xml, String xpathExpression) {
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(false);
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document document = builder.parse(new InputSource(new StringReader(xml)));
+
+            XPath xpath = XPathFactory.newInstance().newXPath();
+            String value = xpath.evaluate(xpathExpression, document);
+            return value == null ? "" : value.trim();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to extract XML value for xpath: " + xpathExpression, e);
+        }
+    }
+
+    private String extractJsonValue(String json, String jsonPathExpression) {
+        try {
+            Object value = JsonPath.from(json).get(jsonPathExpression);
+            return value == null ? "" : String.valueOf(value).trim();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to extract JSON value for jsonPath: " + jsonPathExpression, e);
+        }
+    }
+
+    private boolean looksLikeXml(String body) {
+        return body != null && body.trim().startsWith("<");
+    }
+
+    private String resolveText(String text, Map<String, String> row, Map<String, String> payloadData) {
+        if (text == null) return "";
+
+        Map<String, String> variables = new LinkedHashMap<>();
+        if (payloadData != null) {
+            payloadData.forEach((k, v) -> variables.put(k, defaultString(v)));
+        }
+        if (row != null) {
+            row.forEach((k, v) -> variables.put(k, defaultString(v)));
+        }
+
+        Pattern pattern = Pattern.compile("\\$\\{([^}]+)}");
+        Matcher matcher = pattern.matcher(text);
+        StringBuffer sb = new StringBuffer();
+
+        while (matcher.find()) {
+            String key = matcher.group(1).trim();
+            String replacement = defaultString(variables.get(key));
+            matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(sb);
+
+        return sb.toString();
+    }
+
+    private String resolveMapAsJsonLike(Map<String, String> map, Map<String, String> row) {
+        StringBuilder sb = new StringBuilder("{");
+        int count = 0;
+        for (Map.Entry<String, String> entry : map.entrySet()) {
+            if (count++ > 0) sb.append(", ");
+            sb.append("\"").append(entry.getKey()).append("\": ");
+            sb.append("\"").append(resolveText(entry.getValue(), row, map)).append("\"");
+        }
+        sb.append("}");
+        return sb.toString();
+    }
+
+    private String getBaseUrl(TestCase testCase) {
+        String key = testCase.getBaseUrlProperty();
+        String baseUrl = System.getProperty(key);
+        if (isBlank(baseUrl)) {
+            baseUrl = System.getenv(key);
+        }
+        if (isBlank(baseUrl)) {
+            throw new IllegalArgumentException("Base URL not found for property/env key: " + key);
+        }
+        return baseUrl;
+    }
+
+    private String buildManualQaMessage(int expectedStatus, int actualStatus) {
+        if (expectedStatus == actualStatus) {
+            return "Retest on UI/manual flow and confirm user-facing behavior matches API result.";
+        }
+
+        switch (actualStatus) {
+            case 400:
+                return "Check missing or invalid request data.";
+            case 401:
+                return "Check invalid or expired authentication token.";
+            case 403:
+                return "Check permission or role authorization.";
+            case 404:
+                return "Check endpoint URL or missing resource.";
+            case 409:
+                return "Check duplicate or conflict condition.";
+            case 422:
+                return "Check validation or business rule error.";
+            case 500:
+                return "Server error. Raise defect with request and response.";
+            case 503:
+            case 504:
+                return "Environment or downstream service issue. Retry and verify dependency health.";
+            default:
+                return "Unexpected response. Review logs, payload, endpoint, and raw response.";
+        }
+    }
+
+    private String clean(String value) {
+        if (value == null) return "";
+        String trimmed = value.trim();
+        if (trimmed.startsWith("\"") && trimmed.endsWith("\"") && trimmed.length() >= 2) {
+            return trimmed.substring(1, trimmed.length() - 1).trim();
+        }
+        return trimmed;
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
+    }
+
+    private String defaultString(String value) {
+        return value == null ? "" : value;
+    }
+
+    private String defaultIfBlank(String value, String fallback) {
+        return isBlank(value) ? fallback : value;
+    }
+
+    private String upper(String value) {
+        return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
 }
