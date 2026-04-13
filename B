@@ -1,17 +1,24 @@
-private String getExpectedMessage(TestCase testCase, Map<String, String> currentRow) {
+private String buildManualQaMessage(int expectedStatus, int actualStatus) {
 
-    if (testCase.getExpectedMessageField() != null &&
-        !testCase.getExpectedMessageField().isBlank()) {
-
-        String value = currentRow.get(testCase.getExpectedMessageField());
-        return value == null ? "" : value.trim();
+    if (expectedStatus == actualStatus) {
+        return "Verify UI/API behavior matches expected scenario.";
     }
 
-    if (testCase.getExpectedBodyContains() != null &&
-        !testCase.getExpectedBodyContains().isEmpty()) {
-
-        return testCase.getExpectedBodyContains().get(0);
+    switch (actualStatus) {
+        case 400:
+            return "Check missing/invalid input fields.";
+        case 401:
+            return "Check authentication token.";
+        case 403:
+            return "Check authorization/permissions.";
+        case 404:
+            return "Check endpoint or resource.";
+        case 500:
+            return "Server error → raise defect.";
+        case 503:
+        case 504:
+            return "Service unavailable → retry or check environment.";
+        default:
+            return "Unexpected response → investigate logs.";
     }
-
-    return "";
 }
