@@ -1,116 +1,45 @@
-package com.acfc.automation.model;
+int expectedStatus = getExpectedStatus(testCase, currentRow);
+String expectedMessage = getExpectedMessage(testCase, currentRow);
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import java.util.List;
-import java.util.Map;
+int actualStatus = response.getStatusCode();
+String responseBody = response.getBody().asString();
 
-@JsonIgnoreProperties(ignoreUnknown = true)
-public class TestCase {
+boolean isNegative = "negative".equalsIgnoreCase(testCase.getType());
 
-    private String id;
-    private String name;
-    private String type;
-    private String suite;
-    private String project;
-    private String method;
-    private String baseUrlProperty;
-    private String endpoint;
-    private Map<String, String> headers;
-    private Object loopEnabled;
-    private String dataFile;
-    private String delimiter;
-    private String payloadFile;
-    private Map<String, String> payloadData;
-    private Integer expectedStatus;
-    private List<ExtractionRule> extractions;
-    private List<String> expectedBodyContains;
-    private Map<String, String> expectedBodyXpaths;
-    private Boolean enabled;
-    private DBQuery query;
+extentTest.info("Expected Status: " + expectedStatus);
+extentTest.info("Actual Status: " + actualStatus);
 
-    private List<FileVsResponseComparison> compareFileVsResponse;
+extentTest.info("Expected Message: " + expectedMessage);
+extentTest.info("Response Body: " + responseBody);
 
-    public String getId() {
-        return id;
-    }
+// ===== STATUS VALIDATION =====
+if (actualStatus == expectedStatus) {
+    extentTest.pass("✅ Status matched: " + actualStatus);
+} else {
+    extentTest.fail("❌ Status mismatch. Expected: " + expectedStatus + " but got: " + actualStatus);
+    finalStatus = "FAIL";
+}
 
-    public String getName() {
-        return name;
-    }
-
-    public String getType() {
-        return type;
-    }
-
-    public String getSuite() {
-        return suite;
-    }
-
-    public String getProject() {
-        return project;
-    }
-
-    public String getMethod() {
-        return method;
-    }
-
-    public String getBaseUrlProperty() {
-        return baseUrlProperty;
-    }
-
-    public String getEndpoint() {
-        return endpoint;
-    }
-
-    public Map<String, String> getHeaders() {
-        return headers;
-    }
-
-    public Object getLoopEnabled() {
-        return loopEnabled;
-    }
-
-    public String getDataFile() {
-        return dataFile;
-    }
-
-    public String getDelimiter() {
-        return delimiter;
-    }
-
-    public String getPayloadFile() {
-        return payloadFile;
-    }
-
-    public Map<String, String> getPayloadData() {
-        return payloadData;
-    }
-
-    public Integer getExpectedStatus() {
-        return expectedStatus;
-    }
-
-    public List<ExtractionRule> getExtractions() {
-        return extractions;
-    }
-
-    public List<String> getExpectedBodyContains() {
-        return expectedBodyContains;
-    }
-
-    public Map<String, String> getExpectedBodyXpaths() {
-        return expectedBodyXpaths;
-    }
-
-    public Boolean getEnabled() {
-        return enabled;
-    }
-
-    public DBQuery getQuery() {
-        return query;
-    }
-
-    public List<FileVsResponseComparison> getCompareFileVsResponse() {
-        return compareFileVsResponse;
+// ===== MESSAGE VALIDATION =====
+if (expectedMessage != null && !expectedMessage.isBlank()) {
+    if (responseBody.contains(expectedMessage)) {
+        extentTest.pass("✅ Message validated: " + expectedMessage);
+    } else {
+        extentTest.fail("❌ Expected message not found: " + expectedMessage);
+        finalStatus = "FAIL";
     }
 }
+
+// ===== NEGATIVE TEST HANDLING =====
+if (isNegative) {
+    if (actualStatus == expectedStatus) {
+        extentTest.pass("✅ Negative test passed (Expected failure received)");
+    } else {
+        extentTest.fail("❌ Negative test failed. Expected error but got success");
+        finalStatus = "FAIL";
+    }
+}
+
+// ===== MANUAL QA MESSAGE =====
+String manualQaMessage = buildManualQaMessage(expectedStatus, actualStatus);
+extentTest.info("📌 Manual QA Action: " + manualQaMessage);
