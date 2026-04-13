@@ -1,34 +1,93 @@
-package com.acfc.automation.context;
+package com.acfc.automation.model;
 
-import java.util.Collections;
-import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
-public final class ExecutionContext {
+public class ExecutionResult {
 
-    private static final Map<String, Object> CONTEXT = new LinkedHashMap<>();
+    private final Map<String, Object> extractedValues = new HashMap<>();
+    private final List<Object> validationDetails = new ArrayList<>();
 
-    private ExecutionContext() {
+    private final String project;
+    private final String id;
+    private final String name;
+    private final String method;
+    private final String type;
+    private final String suite;
+    private final int expectedStatus;
+    private final int actualStatus;
+    private final String status;
+    private final long durationMs;
+
+    public ExecutionResult(String project,
+                           String id,
+                           String name,
+                           String method,
+                           String type,
+                           String suite,
+                           int expectedStatus,
+                           int actualStatus,
+                           String status,
+                           long durationMs) {
+        this.project = project;
+        this.id = id;
+        this.name = name;
+        this.method = method;
+        this.type = type;
+        this.suite = suite;
+        this.expectedStatus = expectedStatus;
+        this.actualStatus = actualStatus;
+        this.status = status;
+        this.durationMs = durationMs;
     }
 
-    public static synchronized void clear() {
-        CONTEXT.clear();
+    public String getProject() {
+        return project;
     }
 
-    public static synchronized void put(String key, Object value) {
-        CONTEXT.put(key, value);
+    public String getId() {
+        return id;
     }
 
-    public static synchronized Object get(String key) {
-        return CONTEXT.get(key);
+    public String getName() {
+        return name;
     }
 
-    public static synchronized Map<String, Object> getAll() {
-        return Collections.unmodifiableMap(new LinkedHashMap<>(CONTEXT));
+    public String getMethod() {
+        return method;
     }
 
-    public static synchronized String getAsString(String key) {
-        Object value = CONTEXT.get(key);
-        return value == null ? "" : String.valueOf(value);
+    public String getType() {
+        return type;
+    }
+
+    public String getSuite() {
+        return suite;
+    }
+
+    public int getExpectedStatus() {
+        return expectedStatus;
+    }
+
+    public int getActualStatus() {
+        return actualStatus;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public long getDurationMs() {
+        return durationMs;
+    }
+
+    public Map<String, Object> getExtractedValues() {
+        return extractedValues;
+    }
+
+    public List<Object> getValidationDetails() {
+        return validationDetails;
     }
 }
