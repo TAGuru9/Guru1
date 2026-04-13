@@ -59,6 +59,12 @@ public final class FrameworkConfig {
                 .resolve("generated-payloads");
     }
 
+    public static Path moduleReportDir() {
+        return projectRootDir()
+                .resolve("build")
+                .resolve("reports");
+    }
+
     public static String getProperty(String key) {
         return PropertiesLoader.get(key);
     }
