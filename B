@@ -1,32 +1,71 @@
-for (Map<String, String> currentRow : csvData) {
+package com.acfc.automation.model;
 
-    // ===== Build request =====
-    String requestBody = buildRequest(testCase, currentRow);
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
-    Response response = RestAssured.given()
-            .headers(headers)
-            .body(requestBody)
-            .post(url);
+import java.util.List;
+import java.util.Map;
 
-    // ===== Read CSV expected =====
-    int expectedStatus = getExpectedStatus(testCase, currentRow);
-    String expectedMessage = getExpectedMessage(testCase, currentRow);
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class TestCase {
 
-    // ===== Actual =====
-    int actualStatus = response.getStatusCode();
-    String responseBody = response.getBody().asString();
+    private String id;
+    private String name;
+    private String type;
+    private String suite;
+    private String project;
+    private String method;
+    private String baseUrlProperty;
+    private String endpoint;
+    private Map<String, String> headers;
 
-    // ===== Validation =====
-    if (actualStatus != expectedStatus) {
-        throw new RuntimeException("Status mismatch: expected "
-                + expectedStatus + " but got " + actualStatus);
-    }
+    private Boolean loopEnabled;
+    private String dataSourceType;          // CSV | TXT | INLINE | PARAMETERIZED | DB | NONE
+    private String dataFile;
+    private String delimiter;
+    private String txtValueField;           // for single-column txt rows
+    private String payloadFile;
+    private Map<String, String> payloadData;
 
-    if (expectedMessage != null && !expectedMessage.isBlank()) {
-        if (!responseBody.contains(expectedMessage)) {
-            throw new RuntimeException("Expected message not found: " + expectedMessage);
-        }
-    }
+    private Integer expectedStatus;
+    private String expectedStatusField;     // ex: Status Code
+    private String expectedMessageField;    // ex: Expected Message
+    private String scenarioTypeField;       // ex: ScenarioType
 
-    System.out.println("Row PASSED: " + currentRow);
+    private List<Map<String, String>> inlineRows;
+    private List<Map<String, String>> parameterSets;
+
+    private List<ExtractionRule> extractions;
+    private List<String> expectedBodyContains;
+    private Map<String, String> expectedBodyXpaths;
+
+    private DBQuery query;
+    private List<FileVsResponseComparison> compareFileVsResponse;
+
+    public String getId() { return id; }
+    public String getName() { return name; }
+    public String getType() { return type; }
+    public String getSuite() { return suite; }
+    public String getProject() { return project; }
+    public String getMethod() { return method; }
+    public String getBaseUrlProperty() { return baseUrlProperty; }
+    public String getEndpoint() { return endpoint; }
+    public Map<String, String> getHeaders() { return headers; }
+    public Boolean getLoopEnabled() { return loopEnabled; }
+    public String getDataSourceType() { return dataSourceType; }
+    public String getDataFile() { return dataFile; }
+    public String getDelimiter() { return delimiter; }
+    public String getTxtValueField() { return txtValueField; }
+    public String getPayloadFile() { return payloadFile; }
+    public Map<String, String> getPayloadData() { return payloadData; }
+    public Integer getExpectedStatus() { return expectedStatus; }
+    public String getExpectedStatusField() { return expectedStatusField; }
+    public String getExpectedMessageField() { return expectedMessageField; }
+    public String getScenarioTypeField() { return scenarioTypeField; }
+    public List<Map<String, String>> getInlineRows() { return inlineRows; }
+    public List<Map<String, String>> getParameterSets() { return parameterSets; }
+    public List<ExtractionRule> getExtractions() { return extractions; }
+    public List<String> getExpectedBodyContains() { return expectedBodyContains; }
+    public Map<String, String> getExpectedBodyXpaths() { return expectedBodyXpaths; }
+    public DBQuery getQuery() { return query; }
+    public List<FileVsResponseComparison> getCompareFileVsResponse() { return compareFileVsResponse; }
 }
