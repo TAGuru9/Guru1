@@ -1,77 +1,11 @@
 package com.acfc.automation.config;
 
-import java.io.InputStream;
-import java.util.Properties;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
-public class FrameworkConfig {
-
-    private static final Properties PROPS = new Properties();
-    private static boolean loaded = false;
+public final class FrameworkConfig {
 
     private FrameworkConfig() {
-    }
-
-    public static synchronized void load() {
-        if (loaded) {
-            return;
-        }
-
-        String env = System.getProperty("env");
-        if (env == null || env.isBlank()) {
-            env = System.getenv("env");
-        }
-        if (env == null || env.isBlank()) {
-            env = "dev";
-        }
-
-        String resourcePath = "config/" + env.trim().toLowerCase() + ".properties";
-
-        System.out.println("DEBUG env           : " + env);
-        System.out.println("DEBUG resourcePath  : " + resourcePath);
-
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        try (InputStream is = classLoader.getResourceAsStream(resourcePath)) {
-            if (is == null) {
-                throw new RuntimeException("Unable to load config file from classpath: " + resourcePath);
-            }
-
-            PROPS.load(is);
-            loaded = true;
-
-            System.out.println("Loaded config from classpath: " + resourcePath);
-            System.out.println("DEBUG api.base.url : " + PROPS.getProperty("api.base.url"));
-        } catch (Exception e) {
-            throw new RuntimeException("Unable to load config file: " + resourcePath, e);
-        }
-    }
-
-    public static String getProperty(String key) {
-        load();
-
-        String value = System.getProperty(key);
-        if (value != null && !value.isBlank()) {
-            return value.trim();
-        }
-
-        value = System.getenv(key);
-        if (value != null && !value.isBlank()) {
-            return value.trim();
-        }
-
-        value = PROPS.getProperty(key);
-        if (value != null && !value.isBlank()) {
-            return value.trim();
-        }
-
-        return null;
-    }
-
-    public static String getRequiredProperty(String key) {
-        String value = getProperty(key);
-        if (value == null || value.isBlank()) {
-            throw new RuntimeException("Required property not found: " + key);
-        }
-        return value;
     }
 
     public static String env() {
@@ -79,6 +13,37 @@ public class FrameworkConfig {
         if (env == null || env.isBlank()) {
             env = System.getenv("env");
         }
-        return (env == null || env.isBlank()) ? "dev" : env.trim().toLowerCase();
+        if (env == null || env.isBlank()) {
+            env = "dev";
+        }
+        return env.trim().toLowerCase();
+    }
+
+    public static String suite() {
+        return System.getProperty("suite", "").trim();
+    }
+
+    public static String type() {
+        return System.getProperty("type", "").trim();
+    }
+
+    public static String ids() {
+        return System.getProperty("ids", "").trim();
+    }
+
+    public static String projectName() {
+        return System.getProperty("projectName", "project-memberEligibility").trim();
+    }
+
+    public static Path projectRootDir() {
+        return Paths.get(projectName()).toAbsolutePath().normalize();
+    }
+
+    public static Path testResourcesDir() {
+        return projectRootDir().resolve(Paths.get("src", "test", "resources"));
+    }
+
+    public static Path configFilePath() {
+        return testResourcesDir().resolve(Paths.get("config", env() + ".properties"));
     }
 }
