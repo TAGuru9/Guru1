@@ -1,66 +1,74 @@
 package com.acfc.automation.data;
 
 import com.acfc.automation.config.FrameworkConfig;
-import com.acfc.automation.model.TestCase;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
 
-public final class TestCaseLoader {
+public final class TestDataReader {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
-
-    private TestCaseLoader() {
+    private TestDataReader() {
     }
 
-    public static List<TestCase> loadAll() {
+    public static List<Map<String, String>> readData(String dataFile, String delimiter) {
         try {
-            Path dir = FrameworkConfig.testResourcesDir().resolve("testcases");
-            List<TestCase> cases = new ArrayList<>();
+            Path path = resolveDataPath(dataFile);
 
-            if (!Files.exists(dir)) {
-                throw new RuntimeException("Testcases directory not found: " + dir.toAbsolutePath());
+            System.out.println("DEBUG dataFile path   : " + path);
+            System.out.println("DEBUG dataFile exists : " + Files.exists(path));
+
+            List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+            List<String> nonEmpty = new ArrayList<>();
+
+            for (String line : lines) {
+                if (line != null && !line.trim().isEmpty()) {
+                    nonEmpty.add(line);
+                }
             }
 
-            Files.list(dir)
-                    .filter(path -> path.toString().toLowerCase().endsWith(".json"))
-                    .sorted()
-                    .forEach(path -> {
-                        try {
-                            System.out.println("DEBUG loaded testcase file: " + path);
-                            cases.add(MAPPER.readValue(path.toFile(), TestCase.class));
-                        } catch (Exception e) {
-                            throw new RuntimeException("Failed to parse testcase file: " + path, e);
-                        }
-                    });
+            if (nonEmpty.isEmpty()) {
+                return new ArrayList<>();
+            }
 
-            return cases;
+            String actualDelimiter = (delimiter == null || delimiter.isBlank()) ? "," : delimiter;
+            String[] headers = nonEmpty.get(0).split(Pattern.quote(actualDelimiter), -1);
+
+            List<Map<String, String>> rows = new ArrayList<>();
+
+            for (int i = 1; i < nonEmpty.size(); i++) {
+                String[] values = nonEmpty.get(i).split(Pattern.quote(actualDelimiter), -1);
+                Map<String, String> row = new LinkedHashMap<>();
+
+                for (int j = 0; j < headers.length; j++) {
+                    String key = clean(headers[j]);
+                    String value = j < values.length ? clean(values[j]) : "";
+                    row.put(key, value);
+                }
+
+                rows.add(row);
+            }
+
+            return rows;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to load testcases", e);
+            throw new RuntimeException("Failed to read data file: " + dataFile, e);
         }
     }
 
-    public static List<TestCase> parse(String tcFile) {
-        try {
-            Path path = resolveTestCasePath(tcFile);
-            return List.of(MAPPER.readValue(path.toFile(), TestCase.class));
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to parse testcase file: " + tcFile, e);
-        }
-    }
-
-    private static Path resolveTestCasePath(String tcFile) {
-        Path direct = Path.of(tcFile).toAbsolutePath().normalize();
+    private static Path resolveDataPath(String dataFile) {
+        Path direct = Path.of(dataFile).toAbsolutePath().normalize();
         if (Files.exists(direct)) {
             return direct;
         }
 
         Path underResources = FrameworkConfig.testResourcesDir()
-                .resolve("testcases")
-                .resolve(tcFile)
+                .resolve("testdata")
+                .resolve(Path.of(dataFile).getFileName().toString())
                 .toAbsolutePath()
                 .normalize();
 
@@ -68,6 +76,26 @@ public final class TestCaseLoader {
             return underResources;
         }
 
-        throw new RuntimeException("Testcase file not found: " + tcFile);
+        Path relativeResource = FrameworkConfig.testResourcesDir()
+                .resolve(dataFile)
+                .toAbsolutePath()
+                .normalize();
+
+        if (Files.exists(relativeResource)) {
+            return relativeResource;
+        }
+
+        throw new RuntimeException("Data file not found: " + dataFile);
+    }
+
+    private static String clean(String value) {
+        if (value == null) {
+            return "";
+        }
+        String trimmed = value.trim();
+        if (trimmed.startsWith("\"") && trimmed.endsWith("\"") && trimmed.length() >= 2) {
+            return trimmed.substring(1, trimmed.length() - 1).trim();
+        }
+        return trimmed;
     }
 }
