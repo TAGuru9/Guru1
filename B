@@ -1,24 +1,32 @@
-private String buildManualQaMessage(int expectedStatus, int actualStatus) {
+for (Map<String, String> currentRow : csvData) {
 
-    if (expectedStatus == actualStatus) {
-        return "Verify UI/API behavior matches expected scenario.";
+    // ===== Build request =====
+    String requestBody = buildRequest(testCase, currentRow);
+
+    Response response = RestAssured.given()
+            .headers(headers)
+            .body(requestBody)
+            .post(url);
+
+    // ===== Read CSV expected =====
+    int expectedStatus = getExpectedStatus(testCase, currentRow);
+    String expectedMessage = getExpectedMessage(testCase, currentRow);
+
+    // ===== Actual =====
+    int actualStatus = response.getStatusCode();
+    String responseBody = response.getBody().asString();
+
+    // ===== Validation =====
+    if (actualStatus != expectedStatus) {
+        throw new RuntimeException("Status mismatch: expected "
+                + expectedStatus + " but got " + actualStatus);
     }
 
-    switch (actualStatus) {
-        case 400:
-            return "Check missing/invalid input fields.";
-        case 401:
-            return "Check authentication token.";
-        case 403:
-            return "Check authorization/permissions.";
-        case 404:
-            return "Check endpoint or resource.";
-        case 500:
-            return "Server error → raise defect.";
-        case 503:
-        case 504:
-            return "Service unavailable → retry or check environment.";
-        default:
-            return "Unexpected response → investigate logs.";
+    if (expectedMessage != null && !expectedMessage.isBlank()) {
+        if (!responseBody.contains(expectedMessage)) {
+            throw new RuntimeException("Expected message not found: " + expectedMessage);
+        }
     }
+
+    System.out.println("Row PASSED: " + currentRow);
 }
