@@ -48,7 +48,15 @@ public final class FrameworkConfig {
     }
 
     public static Path sharedContextFile() {
-        return projectRootDir().resolve("build").resolve("shared-context.json");
+        return projectRootDir()
+                .resolve("build")
+                .resolve("shared-context.json");
+    }
+
+    public static Path moduleGeneratedPayloadDir() {
+        return projectRootDir()
+                .resolve("build")
+                .resolve("generated-payloads");
     }
 
     public static String getProperty(String key) {
