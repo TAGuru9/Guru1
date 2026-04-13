@@ -1,45 +1,21 @@
-int expectedStatus = getExpectedStatus(testCase, currentRow);
-String expectedMessage = getExpectedMessage(testCase, currentRow);
+private int getExpectedStatus(TestCase testCase, Map<String, String> currentRow) {
 
-int actualStatus = response.getStatusCode();
-String responseBody = response.getBody().asString();
+    if (testCase.getExpectedStatusField() != null &&
+        !testCase.getExpectedStatusField().isBlank()) {
 
-boolean isNegative = "negative".equalsIgnoreCase(testCase.getType());
+        String value = currentRow.get(testCase.getExpectedStatusField());
 
-extentTest.info("Expected Status: " + expectedStatus);
-extentTest.info("Actual Status: " + actualStatus);
+        if (value == null || value.isBlank()) {
+            throw new RuntimeException("Missing expected status in CSV column: "
+                    + testCase.getExpectedStatusField());
+        }
 
-extentTest.info("Expected Message: " + expectedMessage);
-extentTest.info("Response Body: " + responseBody);
-
-// ===== STATUS VALIDATION =====
-if (actualStatus == expectedStatus) {
-    extentTest.pass("✅ Status matched: " + actualStatus);
-} else {
-    extentTest.fail("❌ Status mismatch. Expected: " + expectedStatus + " but got: " + actualStatus);
-    finalStatus = "FAIL";
-}
-
-// ===== MESSAGE VALIDATION =====
-if (expectedMessage != null && !expectedMessage.isBlank()) {
-    if (responseBody.contains(expectedMessage)) {
-        extentTest.pass("✅ Message validated: " + expectedMessage);
-    } else {
-        extentTest.fail("❌ Expected message not found: " + expectedMessage);
-        finalStatus = "FAIL";
+        return Integer.parseInt(value.trim());
     }
-}
 
-// ===== NEGATIVE TEST HANDLING =====
-if (isNegative) {
-    if (actualStatus == expectedStatus) {
-        extentTest.pass("✅ Negative test passed (Expected failure received)");
-    } else {
-        extentTest.fail("❌ Negative test failed. Expected error but got success");
-        finalStatus = "FAIL";
+    if (testCase.getExpectedStatus() != null) {
+        return testCase.getExpectedStatus();
     }
-}
 
-// ===== MANUAL QA MESSAGE =====
-String manualQaMessage = buildManualQaMessage(expectedStatus, actualStatus);
-extentTest.info("📌 Manual QA Action: " + manualQaMessage);
+    return 200; // default fallback
+}
