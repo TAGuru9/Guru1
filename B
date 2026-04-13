@@ -1,13 +1,61 @@
-private String getBaseUrl(TestCase testCase) {
-    String key = testCase.getBaseUrlProperty();
-    if (key == null || key.isBlank()) {
-        throw new IllegalArgumentException("baseUrlProperty is missing in test case: " + testCase.getId());
+package com.acfc.automation.config;
+
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+public final class FrameworkConfig {
+
+    private FrameworkConfig() {
     }
 
-    String baseUrl = PropertiesLoader.getRequired(key);
+    public static String env() {
+        String env = System.getProperty("env");
+        if (env == null || env.isBlank()) {
+            env = System.getenv("env");
+        }
+        if (env == null || env.isBlank()) {
+            env = "dev";
+        }
+        return env.trim().toLowerCase();
+    }
 
-    System.out.println("DEBUG baseUrlProperty key : " + key);
-    System.out.println("DEBUG resolved baseUrl    : " + baseUrl);
+    public static String suite() {
+        return System.getProperty("suite", "").trim();
+    }
 
-    return baseUrl;
+    public static String type() {
+        return System.getProperty("type", "").trim();
+    }
+
+    public static String ids() {
+        return System.getProperty("ids", "").trim();
+    }
+
+    public static String projectName() {
+        return System.getProperty("projectName", "project-memberEligibility").trim();
+    }
+
+    public static Path projectRootDir() {
+        return Paths.get(projectName()).toAbsolutePath().normalize();
+    }
+
+    public static Path testResourcesDir() {
+        return projectRootDir().resolve(Paths.get("src", "test", "resources"));
+    }
+
+    public static Path configFilePath() {
+        return testResourcesDir().resolve(Paths.get("config", env() + ".properties"));
+    }
+
+    public static Path sharedContextFile() {
+        return projectRootDir().resolve("build").resolve("shared-context.json");
+    }
+
+    public static String getProperty(String key) {
+        return PropertiesLoader.get(key);
+    }
+
+    public static String getRequiredProperty(String key) {
+        return PropertiesLoader.getRequired(key);
+    }
 }
