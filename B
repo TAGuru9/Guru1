@@ -1,74 +1,13 @@
-package com.acfc.automation.config;
-
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Properties;
-
-public final class PropertiesLoader {
-
-    private static final Properties PROPERTIES = new Properties();
-    private static boolean loaded = false;
-
-    private PropertiesLoader() {
+private String getBaseUrl(TestCase testCase) {
+    String key = testCase.getBaseUrlProperty();
+    if (key == null || key.isBlank()) {
+        throw new IllegalArgumentException("baseUrlProperty is missing in test case: " + testCase.getId());
     }
 
-    public static synchronized Properties load() {
-        if (loaded) {
-            return PROPERTIES;
-        }
+    String baseUrl = PropertiesLoader.getRequired(key);
 
-        Path path = FrameworkConfig.configFilePath();
+    System.out.println("DEBUG baseUrlProperty key : " + key);
+    System.out.println("DEBUG resolved baseUrl    : " + baseUrl);
 
-        try {
-            System.out.println("DEBUG env              : " + FrameworkConfig.env());
-            System.out.println("DEBUG projectName      : " + FrameworkConfig.projectName());
-            System.out.println("DEBUG testResourcesDir : " + FrameworkConfig.testResourcesDir());
-            System.out.println("DEBUG config path      : " + path.toAbsolutePath());
-            System.out.println("DEBUG config exists    : " + Files.exists(path));
-
-            if (!Files.exists(path)) {
-                throw new RuntimeException("Config file not found: " + path.toAbsolutePath());
-            }
-
-            try (InputStream in = Files.newInputStream(path)) {
-                PROPERTIES.load(in);
-            }
-
-            loaded = true;
-            return PROPERTIES;
-        } catch (Exception e) {
-            throw new RuntimeException("Unable to load environment properties from: " + path.toAbsolutePath(), e);
-        }
-    }
-
-    public static String get(String key) {
-        load();
-
-        String value = System.getProperty(key);
-        if (value != null && !value.isBlank()) {
-            return value.trim();
-        }
-
-        value = System.getenv(key);
-        if (value != null && !value.isBlank()) {
-            return value.trim();
-        }
-
-        value = PROPERTIES.getProperty(key);
-        return value == null ? "" : value.trim();
-    }
-
-    public static String getRequired(String key) {
-        String value = get(key);
-        if (value.isBlank()) {
-            throw new RuntimeException("Required property not found: " + key);
-        }
-        return value;
-    }
-
-    public static synchronized void clear() {
-        PROPERTIES.clear();
-        loaded = false;
-    }
+    return baseUrl;
 }
