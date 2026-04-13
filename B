@@ -1,61 +1,84 @@
-private int executeSingleRow(TestCase testCase, Map<String, String> currentRow, int iteration) throws Exception {
-    Map<String, String> workingRow = new LinkedHashMap<>(currentRow);
+package com.acfc.automation.config;
 
-    if (testCase.getQuery() != null && !isBlank(testCase.getQuery().getSql())) {
-        Map<String, String> dbValues = executeDbAndStoreValues(testCase.getQuery(), workingRow);
-        if (!dbValues.isEmpty()) {
-            workingRow.putAll(dbValues);
-            System.out.println("DB Values Loaded : " + dbValues);
+import java.io.InputStream;
+import java.util.Properties;
+
+public class FrameworkConfig {
+
+    private static final Properties PROPS = new Properties();
+    private static boolean loaded = false;
+
+    private FrameworkConfig() {
+    }
+
+    public static synchronized void load() {
+        if (loaded) {
+            return;
+        }
+
+        String env = System.getProperty("env");
+        if (env == null || env.isBlank()) {
+            env = System.getenv("env");
+        }
+        if (env == null || env.isBlank()) {
+            env = "dev";
+        }
+
+        String resourcePath = "config/" + env.trim().toLowerCase() + ".properties";
+
+        System.out.println("DEBUG env           : " + env);
+        System.out.println("DEBUG resourcePath  : " + resourcePath);
+
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        try (InputStream is = classLoader.getResourceAsStream(resourcePath)) {
+            if (is == null) {
+                throw new RuntimeException("Unable to load config file from classpath: " + resourcePath);
+            }
+
+            PROPS.load(is);
+            loaded = true;
+
+            System.out.println("Loaded config from classpath: " + resourcePath);
+            System.out.println("DEBUG api.base.url : " + PROPS.getProperty("api.base.url"));
+        } catch (Exception e) {
+            throw new RuntimeException("Unable to load config file: " + resourcePath, e);
         }
     }
 
-    String baseUrl = getBaseUrl(testCase);
-    String endpoint = resolveText(defaultString(testCase.getEndpoint()), workingRow, testCase.getPayloadData());
-    String url = baseUrl + endpoint;
+    public static String getProperty(String key) {
+        load();
 
-    String requestBody = buildRequestBody(testCase, workingRow);
-    Map<String, String> resolvedHeaders = buildHeaders(testCase, workingRow);
+        String value = System.getProperty(key);
+        if (value != null && !value.isBlank()) {
+            return value.trim();
+        }
 
-    int expectedStatus = getExpectedStatus(testCase, workingRow);
-    String expectedMessage = getExpectedMessage(testCase, workingRow);
-    String scenarioType = getScenarioType(testCase, workingRow);
+        value = System.getenv(key);
+        if (value != null && !value.isBlank()) {
+            return value.trim();
+        }
 
-    System.out.println("--------------------------------------------------");
-    System.out.println("Iteration      : " + iteration);
-    System.out.println("Scenario Type  : " + scenarioType);
-    System.out.println("URL            : " + url);
-    System.out.println("ExpectedStatus : " + expectedStatus);
-    System.out.println("ExpectedMsg    : " + expectedMessage);
-    System.out.println("Headers        : " + resolvedHeaders);
-    System.out.println("Working Row    : " + workingRow);
-    System.out.println("Request Body   : ");
-    System.out.println(requestBody);
+        value = PROPS.getProperty(key);
+        if (value != null && !value.isBlank()) {
+            return value.trim();
+        }
 
-    Response response = sendRequest(testCase.getMethod(), url, resolvedHeaders, requestBody);
-
-    int actualStatus = response.getStatusCode();
-    String responseBody = response.getBody() == null ? "" : response.getBody().asString();
-
-    System.out.println("Actual Status  : " + actualStatus);
-    System.out.println("Response Body  : ");
-    System.out.println(responseBody);
-
-    validateStatus(expectedStatus, actualStatus, workingRow);
-    validateExpectedMessage(expectedMessage, responseBody, workingRow);
-    validateExpectedBodyContains(testCase, responseBody);
-    validateExpectedBodyXpaths(testCase, responseBody, workingRow);
-
-    Map<String, String> extractedValues = extractResponseValues(testCase, responseBody);
-    if (!extractedValues.isEmpty()) {
-        System.out.println("Extracted Values: " + extractedValues);
+        return null;
     }
 
-    validateFileVsResponse(testCase, workingRow, extractedValues);
-    validateDbValuesAgainstResponse(testCase.getQuery(), workingRow, extractedValues, responseBody);
+    public static String getRequiredProperty(String key) {
+        String value = getProperty(key);
+        if (value == null || value.isBlank()) {
+            throw new RuntimeException("Required property not found: " + key);
+        }
+        return value;
+    }
 
-    System.out.println("Iteration " + iteration + " PASSED");
-    System.out.println("Manual QA Note: " + buildManualQaMessage(expectedStatus, actualStatus));
-    System.out.println("--------------------------------------------------");
-
-    return actualStatus;
+    public static String env() {
+        String env = System.getProperty("env");
+        if (env == null || env.isBlank()) {
+            env = System.getenv("env");
+        }
+        return (env == null || env.isBlank()) ? "dev" : env.trim().toLowerCase();
+    }
 }
