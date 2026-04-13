@@ -1,49 +1,74 @@
 package com.acfc.automation.config;
 
+import java.io.InputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.util.Properties;
 
-public final class FrameworkConfig {
+public final class PropertiesLoader {
 
-    private FrameworkConfig() {
+    private static final Properties PROPERTIES = new Properties();
+    private static boolean loaded = false;
+
+    private PropertiesLoader() {
     }
 
-    public static String env() {
-        String env = System.getProperty("env");
-        if (env == null || env.isBlank()) {
-            env = System.getenv("env");
+    public static synchronized Properties load() {
+        if (loaded) {
+            return PROPERTIES;
         }
-        if (env == null || env.isBlank()) {
-            env = "dev";
+
+        Path path = FrameworkConfig.configFilePath();
+
+        try {
+            System.out.println("DEBUG env              : " + FrameworkConfig.env());
+            System.out.println("DEBUG projectName      : " + FrameworkConfig.projectName());
+            System.out.println("DEBUG testResourcesDir : " + FrameworkConfig.testResourcesDir());
+            System.out.println("DEBUG config path      : " + path.toAbsolutePath());
+            System.out.println("DEBUG config exists    : " + Files.exists(path));
+
+            if (!Files.exists(path)) {
+                throw new RuntimeException("Config file not found: " + path.toAbsolutePath());
+            }
+
+            try (InputStream in = Files.newInputStream(path)) {
+                PROPERTIES.load(in);
+            }
+
+            loaded = true;
+            return PROPERTIES;
+        } catch (Exception e) {
+            throw new RuntimeException("Unable to load environment properties from: " + path.toAbsolutePath(), e);
         }
-        return env.trim().toLowerCase();
     }
 
-    public static String suite() {
-        return System.getProperty("suite", "").trim();
+    public static String get(String key) {
+        load();
+
+        String value = System.getProperty(key);
+        if (value != null && !value.isBlank()) {
+            return value.trim();
+        }
+
+        value = System.getenv(key);
+        if (value != null && !value.isBlank()) {
+            return value.trim();
+        }
+
+        value = PROPERTIES.getProperty(key);
+        return value == null ? "" : value.trim();
     }
 
-    public static String type() {
-        return System.getProperty("type", "").trim();
+    public static String getRequired(String key) {
+        String value = get(key);
+        if (value.isBlank()) {
+            throw new RuntimeException("Required property not found: " + key);
+        }
+        return value;
     }
 
-    public static String ids() {
-        return System.getProperty("ids", "").trim();
-    }
-
-    public static String projectName() {
-        return System.getProperty("projectName", "project-memberEligibility").trim();
-    }
-
-    public static Path projectRootDir() {
-        return Paths.get(projectName()).toAbsolutePath().normalize();
-    }
-
-    public static Path testResourcesDir() {
-        return projectRootDir().resolve(Paths.get("src", "test", "resources"));
-    }
-
-    public static Path configFilePath() {
-        return testResourcesDir().resolve(Paths.get("config", env() + ".properties"));
+    public static synchronized void clear() {
+        PROPERTIES.clear();
+        loaded = false;
     }
 }
