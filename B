@@ -1,11 +1,73 @@
-package com.acfc.automation.model;
+package com.acfc.automation.data;
 
-public class FileVsResponseComparison {
-    private String fileField;
-    private String responseKey;
-    private String comparison;
+import com.acfc.automation.config.FrameworkConfig;
+import com.acfc.automation.model.TestCase;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-    public String getFileField() { return fileField; }
-    public String getResponseKey() { return responseKey; }
-    public String getComparison() { return comparison; }
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+
+public final class TestCaseLoader {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    private TestCaseLoader() {
+    }
+
+    public static List<TestCase> loadAll() {
+        try {
+            Path dir = FrameworkConfig.testResourcesDir().resolve("testcases");
+            List<TestCase> cases = new ArrayList<>();
+
+            if (!Files.exists(dir)) {
+                throw new RuntimeException("Testcases directory not found: " + dir.toAbsolutePath());
+            }
+
+            Files.list(dir)
+                    .filter(path -> path.toString().toLowerCase().endsWith(".json"))
+                    .sorted()
+                    .forEach(path -> {
+                        try {
+                            System.out.println("DEBUG loaded testcase file: " + path);
+                            cases.add(MAPPER.readValue(path.toFile(), TestCase.class));
+                        } catch (Exception e) {
+                            throw new RuntimeException("Failed to parse testcase file: " + path, e);
+                        }
+                    });
+
+            return cases;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load testcases", e);
+        }
+    }
+
+    public static List<TestCase> parse(String tcFile) {
+        try {
+            Path path = resolveTestCasePath(tcFile);
+            return List.of(MAPPER.readValue(path.toFile(), TestCase.class));
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse testcase file: " + tcFile, e);
+        }
+    }
+
+    private static Path resolveTestCasePath(String tcFile) {
+        Path direct = Path.of(tcFile).toAbsolutePath().normalize();
+        if (Files.exists(direct)) {
+            return direct;
+        }
+
+        Path underResources = FrameworkConfig.testResourcesDir()
+                .resolve("testcases")
+                .resolve(tcFile)
+                .toAbsolutePath()
+                .normalize();
+
+        if (Files.exists(underResources)) {
+            return underResources;
+        }
+
+        throw new RuntimeException("Testcase file not found: " + tcFile);
+    }
 }
