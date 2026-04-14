@@ -1,23 +1,122 @@
-test {
-    useJUnitPlatform()
+package com.acfc.automation.report.kpi;
 
-    include '**/ProjectRunnerTest.class'
+public class KpiEntry {
 
-    systemProperties(System.getProperties())
+    private String project;
+    private String suite;
+    private String type;
+    private String env;
+    private String tcId;
+    private String tcName;
+    private String executionMode;
+    private String iteration;
+    private String status;
+    private long durationMs;
+    private String dataFile;
+    private String reportPath;
+    private String errorMessage;
 
-    testLogging {
-        events 'passed', 'failed', 'skipped', 'standard_out', 'standard_error'
-        showStandardStreams = true
-        exceptionFormat 'full'
+    public String getProject() {
+        return project;
     }
 
-    doFirst {
-        println "DEBUG build.gradle tcFile   = ${System.getProperty('tcFile')}"
-        println "DEBUG build.gradle tcfile   = ${System.getProperty('tcfile')}"
-        println "DEBUG build.gradle ids      = ${System.getProperty('ids')}"
-        println "DEBUG build.gradle names    = ${System.getProperty('names')}"
-        println "DEBUG build.gradle dataFile = ${System.getProperty('dataFile')}"
-        println "DEBUG build.gradle datafile = ${System.getProperty('datafile')}"
-        println "DEBUG build.gradle test class include = ProjectRunnerTest"
+    public void setProject(String project) {
+        this.project = project;
+    }
+
+    public String getSuite() {
+        return suite;
+    }
+
+    public void setSuite(String suite) {
+        this.suite = suite;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public String getEnv() {
+        return env;
+    }
+
+    public void setEnv(String env) {
+        this.env = env;
+    }
+
+    public String getTcId() {
+        return tcId;
+    }
+
+    public void setTcId(String tcId) {
+        this.tcId = tcId;
+    }
+
+    public String getTcName() {
+        return tcName;
+    }
+
+    public void setTcName(String tcName) {
+        this.tcName = tcName;
+    }
+
+    public String getExecutionMode() {
+        return executionMode;
+    }
+
+    public void setExecutionMode(String executionMode) {
+        this.executionMode = executionMode;
+    }
+
+    public String getIteration() {
+        return iteration;
+    }
+
+    public void setIteration(String iteration) {
+        this.iteration = iteration;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public long getDurationMs() {
+        return durationMs;
+    }
+
+    public void setDurationMs(long durationMs) {
+        this.durationMs = durationMs;
+    }
+
+    public String getDataFile() {
+        return dataFile;
+    }
+
+    public void setDataFile(String dataFile) {
+        this.dataFile = dataFile;
+    }
+
+    public String getReportPath() {
+        return reportPath;
+    }
+
+    public void setReportPath(String reportPath) {
+        this.reportPath = reportPath;
+    }
+
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
     }
 }
