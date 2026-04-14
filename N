@@ -1,68 +1,37 @@
-package com.acfc.automation.payload;
+package com.acfc.automation.util;
 
-import com.acfc.automation.util.FileUtil;
-import com.acfc.automation.util.PlaceholderResolver;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-public class PayloadBuilder {
+public class PlaceholderResolver {
 
-    private PayloadBuilder() {
+    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{([^}]+)}");
+
+    private PlaceholderResolver() {
     }
 
-    public static String build(String inlineBody,
-                               String bodyFile,
-                               String requestTemplate,
-                               Map<String, Object> context,
-                               String testId) {
-        try {
-            String content = null;
-
-            if (inlineBody != null && !inlineBody.isBlank()) {
-                content = inlineBody;
-
-            } else if (bodyFile != null && !bodyFile.isBlank()) {
-                Path bodyPath = Paths.get(bodyFile);
-
-                if (!Files.exists(bodyPath)) {
-                    bodyPath = Paths.get("src", "test", "resources")
-                            .resolve(bodyFile)
-                            .normalize();
-                }
-
-                content = FileUtil.read(bodyPath);
-
-            } else if (requestTemplate != null && !requestTemplate.isBlank()) {
-                Path templatePath = Paths.get(requestTemplate);
-
-                if (!Files.exists(templatePath)) {
-                    templatePath = Paths.get("src", "test", "resources")
-                            .resolve(requestTemplate)
-                            .normalize();
-                }
-
-                content = FileUtil.read(templatePath);
-            }
-
-            if (content == null) {
-                return null;
-            }
-
-            String resolved = PlaceholderResolver.resolve(content, context);
-
-            Path outDir = Paths.get("build", "generated-payloads");
-            Files.createDirectories(outDir);
-
-            Path out = outDir.resolve(testId + "-request.json");
-            FileUtil.write(out, resolved);
-
-            return resolved;
-
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to build payload for test: " + testId, e);
+    public static String resolve(String content, Map<String, Object> context) {
+        if (content == null) {
+            return null;
         }
+
+        if (context == null || context.isEmpty()) {
+            return content;
+        }
+
+        Matcher matcher = PLACEHOLDER_PATTERN.matcher(content);
+        StringBuffer resolved = new StringBuffer();
+
+        while (matcher.find()) {
+            String key = matcher.group(1).trim();
+            Object value = context.get(key);
+
+            String replacement = value == null ? "" : String.valueOf(value);
+            matcher.appendReplacement(resolved, Matcher.quoteReplacement(replacement));
+        }
+
+        matcher.appendTail(resolved);
+        return resolved.toString();
     }
 }
