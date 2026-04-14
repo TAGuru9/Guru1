@@ -1,37 +1,40 @@
 package com.acfc.automation.util;
 
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
-public class PlaceholderResolver {
+public class FileResolver {
 
-    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{([^}]+)}");
-
-    private PlaceholderResolver() {
+    private FileResolver() {
     }
 
-    public static String resolve(String content, Map<String, Object> context) {
-        if (content == null) {
-            return null;
+    public static Path resolve(String inputPath) {
+        if (inputPath == null || inputPath.isBlank()) {
+            throw new IllegalArgumentException("Input path is blank");
         }
 
-        if (context == null || context.isEmpty()) {
-            return content;
+        String trimmed = inputPath.trim();
+
+        Path direct = Paths.get(trimmed);
+        if (direct.isAbsolute() && Files.exists(direct)) {
+            return direct.toAbsolutePath().normalize();
         }
 
-        Matcher matcher = PLACEHOLDER_PATTERN.matcher(content);
-        StringBuffer resolved = new StringBuffer();
-
-        while (matcher.find()) {
-            String key = matcher.group(1).trim();
-            Object value = context.get(key);
-
-            String replacement = value == null ? "" : String.valueOf(value);
-            matcher.appendReplacement(resolved, Matcher.quoteReplacement(replacement));
+        if (Files.exists(direct)) {
+            return direct.toAbsolutePath().normalize();
         }
 
-        matcher.appendTail(resolved);
-        return resolved.toString();
+        Path resourcePath = Paths.get("src", "test", "resources")
+                .resolve(trimmed)
+                .normalize();
+
+        if (Files.exists(resourcePath)) {
+            return resourcePath.toAbsolutePath().normalize();
+        }
+
+        throw new RuntimeException(
+                "File not found. Checked direct/relative/resources paths for: " + inputPath
+        );
     }
 }
