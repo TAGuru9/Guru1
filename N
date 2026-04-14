@@ -1,5 +1,6 @@
 package com.acfc.automation.data;
 
+import com.acfc.automation.config.FrameworkConfig;
 import com.acfc.automation.model.TestCase;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,26 +22,16 @@ public final class TestCaseLoader {
     }
 
     private static String getProject() {
-        return System.getProperty("project", "").trim();
+        String project = System.getProperty("project");
+        if (project != null && !project.trim().isBlank()) {
+            return project.trim();
+        }
+        return FrameworkConfig.getProperty("project", "").trim();
     }
 
     public static List<TestCase> parse(String filePath) {
         try {
-            String project = getProject();
-
-            Path path = Paths.get(filePath);
-
-            if (!Files.exists(path)) {
-                path = Paths.get("src", "test", "resources")
-                        .resolve(filePath)
-                        .normalize();
-            }
-
-            if (!Files.exists(path) && !project.isEmpty()) {
-                path = Paths.get(project, "src", "test", "resources")
-                        .resolve(filePath)
-                        .normalize();
-            }
+            Path path = resolveTestcasePath(filePath);
 
             if (!Files.exists(path)) {
                 throw new RuntimeException("Test case file not found: " + filePath);
@@ -62,27 +53,8 @@ public final class TestCaseLoader {
     public static List<TestCase> loadAll() {
         try {
             List<TestCase> cases = new ArrayList<>();
-            String project = getProject();
 
-            List<Path> candidateDirs = new ArrayList<>();
-
-            // 1. Local module
-            candidateDirs.add(Paths.get("src", "test", "resources", "testcases"));
-
-            // 2. From project argument
-            if (!project.isEmpty()) {
-                candidateDirs.add(Paths.get(project, "src", "test", "resources", "testcases"));
-            }
-
-            Path dir = null;
-
-            for (Path candidate : candidateDirs) {
-                if (Files.exists(candidate)) {
-                    dir = candidate;
-                    break;
-                }
-            }
-
+            Path dir = resolveTestcaseDirectory();
             if (dir == null) {
                 System.out.println("No testcase directory found.");
                 return cases;
@@ -98,15 +70,70 @@ public final class TestCaseLoader {
                         .toList();
 
                 for (Path file : files) {
-                    TestCase testCase = MAPPER.readValue(file.toFile(), TestCase.class);
-                    cases.add(testCase);
+                    try {
+                        System.out.println("Reading testcase file: " + file.getFileName());
+                        TestCase testCase = MAPPER.readValue(file.toFile(), TestCase.class);
+                        cases.add(testCase);
+                    } catch (Exception e) {
+                        System.out.println("Skipping invalid testcase file: "
+                                + file.getFileName() + " -> " + e.getMessage());
+                    }
                 }
             }
 
+            System.out.println("Loaded test cases count: " + cases.size());
             return cases;
 
         } catch (Exception e) {
             throw new RuntimeException("Failed to load test cases", e);
         }
+    }
+
+    private static Path resolveTestcasePath(String filePath) {
+        String project = getProject();
+
+        List<Path> candidates = new ArrayList<>();
+
+        // 1. Exact path as provided
+        candidates.add(Paths.get(filePath));
+
+        // 2. Relative to current module resources
+        candidates.add(Paths.get("src", "test", "resources").resolve(filePath).normalize());
+
+        // 3. Relative to provided project resources
+        if (!project.isEmpty()) {
+            candidates.add(Paths.get(project, "src", "test", "resources").resolve(filePath).normalize());
+        }
+
+        for (Path candidate : candidates) {
+            if (Files.exists(candidate)) {
+                return candidate;
+            }
+        }
+
+        // Return best guess for logging/error message
+        return candidates.get(candidates.size() - 1);
+    }
+
+    private static Path resolveTestcaseDirectory() {
+        String project = getProject();
+
+        List<Path> candidateDirs = new ArrayList<>();
+
+        // 1. Current module
+        candidateDirs.add(Paths.get("src", "test", "resources", "testcases"));
+
+        // 2. Passed/configured project module
+        if (!project.isEmpty()) {
+            candidateDirs.add(Paths.get(project, "src", "test", "resources", "testcases"));
+        }
+
+        for (Path candidate : candidateDirs) {
+            if (Files.exists(candidate)) {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 }
