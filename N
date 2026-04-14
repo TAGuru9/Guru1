@@ -10,6 +10,9 @@ import java.util.Map;
 
 public class PayloadBuilder {
 
+    private PayloadBuilder() {
+    }
+
     public static String build(String inlineBody,
                                String bodyFile,
                                String requestTemplate,
@@ -20,6 +23,7 @@ public class PayloadBuilder {
 
             if (inlineBody != null && !inlineBody.isBlank()) {
                 content = inlineBody;
+
             } else if (bodyFile != null && !bodyFile.isBlank()) {
                 Path bodyPath = Paths.get(bodyFile);
 
