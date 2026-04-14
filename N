@@ -1,139 +1,54 @@
-package com.acfc.automation.data;
+package com.acfc.automation.config;
 
-import com.acfc.automation.config.FrameworkConfig;
-import com.acfc.automation.model.TestCase;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.InputStream;
+import java.util.Properties;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.stream.Stream;
+public final class PropertiesLoader {
 
-public final class TestCaseLoader {
+    private static Properties properties;
+    private static String loadedEnv;
 
-    private static final ObjectMapper MAPPER = new ObjectMapper()
-            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-
-    private TestCaseLoader() {
+    private PropertiesLoader() {
     }
 
-    private static String getProject() {
-        String project = System.getProperty("project");
-        if (project != null && !project.trim().isBlank()) {
-            return project.trim();
+    public static synchronized Properties load() {
+        String env = System.getProperty("env", "dev").trim();
+
+        if (properties != null && env.equalsIgnoreCase(loadedEnv)) {
+            return properties;
         }
-        return FrameworkConfig.getProperty("project", "").trim();
-    }
 
-    public static List<TestCase> parse(String filePath) {
         try {
-            Path path = resolveTestcasePath(filePath);
+            String fileName = "config/" + env + ".properties";
 
-            if (!Files.exists(path)) {
-                throw new RuntimeException("Test case file not found: " + filePath);
+            InputStream is = PropertiesLoader.class
+                    .getClassLoader()
+                    .getResourceAsStream(fileName);
+
+            if (is == null) {
+                throw new RuntimeException("Config file not found: " + fileName);
             }
 
-            System.out.println("Parsing testcase from: " + path.toAbsolutePath());
+            Properties loaded = new Properties();
+            loaded.load(is);
 
-            TestCase testCase = MAPPER.readValue(path.toFile(), TestCase.class);
+            properties = loaded;
+            loadedEnv = env;
 
-            List<TestCase> list = new ArrayList<>();
-            list.add(testCase);
-            return list;
+            System.out.println("Loaded config file: " + fileName);
+            return properties;
 
         } catch (Exception e) {
-            throw new RuntimeException("Failed to load test case: " + filePath, e);
+            throw new RuntimeException("Unable to load environment properties", e);
         }
     }
 
-    public static List<TestCase> loadAll() {
-        try {
-            List<TestCase> cases = new ArrayList<>();
-
-            Path dir = resolveTestcaseDirectory();
-            if (dir == null) {
-                System.out.println("No testcase directory found.");
-                return cases;
-            }
-
-            System.out.println("Loading testcases from: " + dir.toAbsolutePath());
-
-            try (Stream<Path> stream = Files.list(dir)) {
-                List<Path> files = stream
-                        .filter(Files::isRegularFile)
-                        .filter(p -> p.toString().toLowerCase().endsWith(".json"))
-                        .sorted(Comparator.comparing(Path::toString))
-                        .toList();
-
-                for (Path file : files) {
-                    try {
-                        System.out.println("Reading testcase file: " + file.getFileName());
-                        TestCase testCase = MAPPER.readValue(file.toFile(), TestCase.class);
-                        cases.add(testCase);
-                    } catch (Exception e) {
-                        System.out.println("Skipping invalid testcase file: "
-                                + file.getFileName() + " -> " + e.getMessage());
-                    }
-                }
-            }
-
-            System.out.println("Loaded test cases count: " + cases.size());
-            return cases;
-
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to load test cases", e);
-        }
+    public static String get(String key) {
+        return load().getProperty(key);
     }
 
-    private static Path resolveTestcasePath(String filePath) {
-        String project = getProject();
-
-        List<Path> candidates = new ArrayList<>();
-
-        // 1. Exact path as provided
-        candidates.add(Paths.get(filePath));
-
-        // 2. Relative to current module resources
-        candidates.add(Paths.get("src", "test", "resources").resolve(filePath).normalize());
-
-        // 3. Relative to provided project resources
-        if (!project.isEmpty()) {
-            candidates.add(Paths.get(project, "src", "test", "resources").resolve(filePath).normalize());
-        }
-
-        for (Path candidate : candidates) {
-            if (Files.exists(candidate)) {
-                return candidate;
-            }
-        }
-
-        // Return best guess for logging/error message
-        return candidates.get(candidates.size() - 1);
-    }
-
-    private static Path resolveTestcaseDirectory() {
-        String project = getProject();
-
-        List<Path> candidateDirs = new ArrayList<>();
-
-        // 1. Current module
-        candidateDirs.add(Paths.get("src", "test", "resources", "testcases"));
-
-        // 2. Passed/configured project module
-        if (!project.isEmpty()) {
-            candidateDirs.add(Paths.get(project, "src", "test", "resources", "testcases"));
-        }
-
-        for (Path candidate : candidateDirs) {
-            if (Files.exists(candidate)) {
-                return candidate;
-            }
-        }
-
-        return null;
+    public static String get(String key, String defaultValue) {
+        String value = get(key);
+        return (value == null || value.trim().isBlank()) ? defaultValue : value.trim();
     }
 }
