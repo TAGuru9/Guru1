@@ -1,101 +1,304 @@
-package com.acfc.automation.data;
+package com.acfc.automation.runner;
 
 import com.acfc.automation.config.FrameworkConfig;
+import com.acfc.automation.context.ExecutionContext;
+import com.acfc.automation.data.TestCaseLoader;
+import com.acfc.automation.engine.ApiExecutionEngine;
+import com.acfc.automation.model.ExecutionResult;
+import com.acfc.automation.model.TestCase;
+import com.acfc.automation.report.ExtentReportManager;
+import com.acfc.automation.report.ExecutionResultStore;
+import com.acfc.automation.report.SummaryTracker;
+import com.acfc.automation.util.TestDataReader;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.DynamicTest;
+import org.junit.jupiter.api.TestFactory;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
+import java.util.Set;
+import java.util.stream.Collectors;
 
-public final class TestDataReader {
+public abstract class ConfigDrivenApiRunner {
 
-    private TestDataReader() {
+    private static final ApiExecutionEngine engine = new ApiExecutionEngine();
+
+    @TestFactory
+    public List<DynamicTest> execution() throws Exception {
+        SummaryTracker.startSuite("api");
+        ExecutionResultStore.clear();
+
+        String tcFile = firstNonBlank(
+                System.getProperty("tcFile"),
+                System.getProperty("tcfile")
+        );
+
+        String ids = firstNonBlank(System.getProperty("ids"));
+        String names = firstNonBlank(System.getProperty("names"));
+
+        System.out.println("==== RUNTIME INPUTS ====");
+        System.out.println("env      = " + System.getProperty("env"));
+        System.out.println("ids      = " + ids);
+        System.out.println("tcFile   = " + tcFile);
+        System.out.println("names    = " + names);
+        System.out.println("dataFile = " + System.getProperty("dataFile"));
+        System.out.println("========================");
+
+        List<TestCase> allCases = loadCases(tcFile);
+        System.out.println("Loaded test cases count: " + allCases.size());
+
+        List<TestCase> selectedCases = selectCases(allCases, tcFile, ids, names);
+
+        if (selectedCases.isEmpty()) {
+            throw new IllegalArgumentException("No matching test cases found for ids/names/tcFile");
+        }
+
+        TestCase reportBase = selectedCases.get(0);
+        ExtentReportManager.initReport(
+                safe(reportBase.getProject()),
+                safe(reportBase.getSuite()),
+                safe(reportBase.getType())
+        );
+
+        List<DynamicTest> tests = new ArrayList<>();
+
+        for (TestCase testCase : selectedCases) {
+            boolean loopEnabled = isLoopEnabled(testCase);
+            String resolvedDataFile = resolveDataFile(testCase);
+            String resolvedDelimiter = resolveDelimiter(testCase);
+
+            System.out.println(
+                    "Selected TC -> id=" + safe(testCase.getId())
+                            + ", name=" + safe(testCase.getName())
+                            + ", loopEnabled=" + loopEnabled
+                            + ", dataFile=" + resolvedDataFile
+                            + ", delimiter=" + resolvedDelimiter
+            );
+
+            if (loopEnabled && resolvedDataFile != null && !resolvedDataFile.isBlank()) {
+                List<Map<String, String>> records = TestDataReader.readData(resolvedDataFile, resolvedDelimiter);
+
+                if (records == null || records.isEmpty()) {
+                    tests.add(DynamicTest.dynamicTest(
+                            safe(testCase.getId()) + " - no loop data",
+                            () -> {
+                                throw new IllegalArgumentException(
+                                        "Loop is enabled but no records found in file: " + resolvedDataFile
+                                );
+                            }
+                    ));
+                    continue;
+                }
+
+                for (int i = 0; i < records.size(); i++) {
+                    final int iteration = i + 1;
+                    final Map<String, String> record = records.get(i);
+
+                    String subscriberId = "";
+                    if (record.containsKey("subscriberID")) {
+                        subscriberId = safe(record.get("subscriberID"));
+                    } else if (record.containsKey("subscriberid")) {
+                        subscriberId = safe(record.get("subscriberid"));
+                    }
+
+                    String displayName = safe(testCase.getId()) + " - iteration " + iteration;
+                    if (!subscriberId.isBlank()) {
+                        displayName = displayName + " - " + subscriberId;
+                    }
+
+                    final String finalResolvedDataFile = resolvedDataFile;
+                    tests.add(DynamicTest.dynamicTest(
+                            displayName,
+                            () -> executeLoopIteration(testCase, record, iteration, finalResolvedDataFile)
+                    ));
+                }
+            } else {
+                final String finalResolvedDataFile = resolvedDataFile;
+                tests.add(DynamicTest.dynamicTest(
+                        safe(testCase.getId()) + " - " + safe(testCase.getName()),
+                        () -> executeSingle(testCase, finalResolvedDataFile)
+                ));
+            }
+        }
+
+        return tests;
     }
 
-    public static List<Map<String, String>> readData(String dataFile, String delimiter) {
+    private List<TestCase> loadCases(String tcFile) {
+        if (!tcFile.isBlank()) {
+            return TestCaseLoader.parse(tcFile);
+        }
+        return TestCaseLoader.loadAll();
+    }
+
+    private List<TestCase> selectCases(List<TestCase> allCases, String tcFile, String ids, String names) {
+        if (!tcFile.isBlank()) {
+            return allCases;
+        }
+
+        if (ids.isBlank() && names.isBlank()) {
+            throw new IllegalArgumentException("Provide ids, names, or tcFile");
+        }
+
+        Set<String> idSet = splitToLowerSet(ids);
+        Set<String> nameSet = splitToLowerSet(names);
+
+        return allCases.stream()
+                .filter(tc -> tc.getEnabled() == null || tc.getEnabled())
+                .filter(tc -> idSet.isEmpty() || idSet.contains(ns(tc.getId()).toLowerCase()))
+                .filter(tc -> nameSet.isEmpty() || nameSet.contains(ns(tc.getName()).toLowerCase()))
+                .collect(Collectors.toList());
+    }
+
+    private void executeLoopIteration(TestCase testCase,
+                                      Map<String, String> record,
+                                      int iteration,
+                                      String resolvedDataFile) {
         try {
-            Path path = resolveDataPath(dataFile);
+            ExecutionContext.clear();
+            ExecutionContext.put("iteration", String.valueOf(iteration));
+            ExecutionContext.put("runtimeDataFile", safe(resolvedDataFile));
+            record.forEach(ExecutionContext::put);
 
-            System.out.println("DEBUG dataFile path   : " + path);
-            System.out.println("DEBUG dataFile exists : " + Files.exists(path));
+            System.out.println("Before executing " + safe(testCase.getId()) + " context = " + ExecutionContext.getAll());
 
-            List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
-            List<String> nonEmpty = new ArrayList<>();
+            ExecutionResult result = engine.execute(testCase);
+            ExecutionResultStore.add(result);
+            SummaryTracker.addResult(result);
 
-            for (String line : lines) {
-                if (line != null && !line.trim().isEmpty()) {
-                    nonEmpty.add(line);
-                }
-            }
+            System.out.println("After executing " + safe(testCase.getId()) + " context = " + ExecutionContext.getAll());
 
-            if (nonEmpty.isEmpty()) {
-                return new ArrayList<>();
-            }
-
-            String actualDelimiter = (delimiter == null || delimiter.isBlank()) ? "," : delimiter;
-            String[] headers = nonEmpty.get(0).split(Pattern.quote(actualDelimiter), -1);
-
-            List<Map<String, String>> rows = new ArrayList<>();
-
-            for (int i = 1; i < nonEmpty.size(); i++) {
-                String[] values = nonEmpty.get(i).split(Pattern.quote(actualDelimiter), -1);
-                Map<String, String> row = new LinkedHashMap<>();
-
-                for (int j = 0; j < headers.length; j++) {
-                    String key = clean(headers[j]);
-                    String value = j < values.length ? clean(values[j]) : "";
-                    row.put(key, value);
-                }
-
-                rows.add(row);
-            }
-
-            return rows;
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to read data file: " + dataFile, e);
+            Assertions.assertEquals(
+                    "PASS",
+                    safe(result.getStatus()).toUpperCase(),
+                    "Test failed for " + safe(testCase.getId()) + " iteration " + iteration
+            );
+        } finally {
+            ExecutionContext.clear();
         }
     }
 
-    private static Path resolveDataPath(String dataFile) {
-        Path direct = Path.of(dataFile).toAbsolutePath().normalize();
-        if (Files.exists(direct)) {
-            return direct;
+    private void executeSingle(TestCase testCase, String resolvedDataFile) {
+        try {
+            ExecutionContext.clear();
+            ExecutionContext.put("iteration", "1");
+
+            if (resolvedDataFile != null && !resolvedDataFile.isBlank()) {
+                ExecutionContext.put("runtimeDataFile", resolvedDataFile);
+            }
+
+            System.out.println("Before executing " + safe(testCase.getId()) + " context = " + ExecutionContext.getAll());
+
+            ExecutionResult result = engine.execute(testCase);
+            ExecutionResultStore.add(result);
+            SummaryTracker.addResult(result);
+
+            System.out.println("After executing " + safe(testCase.getId()) + " context = " + ExecutionContext.getAll());
+
+            Assertions.assertEquals(
+                    "PASS",
+                    safe(result.getStatus()).toUpperCase(),
+                    "Single test failed: " + safe(testCase.getId())
+            );
+        } finally {
+            ExecutionContext.clear();
         }
-
-        Path underResources = FrameworkConfig.testResourcesDir()
-                .resolve("testdata")
-                .resolve(Path.of(dataFile).getFileName().toString())
-                .toAbsolutePath()
-                .normalize();
-
-        if (Files.exists(underResources)) {
-            return underResources;
-        }
-
-        Path relativeResource = FrameworkConfig.testResourcesDir()
-                .resolve(dataFile)
-                .toAbsolutePath()
-                .normalize();
-
-        if (Files.exists(relativeResource)) {
-            return relativeResource;
-        }
-
-        throw new RuntimeException("Data file not found: " + dataFile);
     }
 
-    private static String clean(String value) {
-        if (value == null) {
+    private boolean isLoopEnabled(TestCase testCase) {
+        return Boolean.TRUE.equals(testCase.getLoopEnabled());
+    }
+
+    private String resolveDataFile(TestCase testCase) {
+        String overrideDataFile = firstNonBlank(
+                System.getProperty("dataFile"),
+                System.getProperty("datafile")
+        );
+
+        if (!overrideDataFile.isBlank()) {
+            return overrideDataFile;
+        }
+
+        return testCase.getDataFile();
+    }
+
+    private String resolveDelimiter(TestCase testCase) {
+        String overrideDelimiter = firstNonBlank(
+                System.getProperty("delimiter"),
+                System.getProperty("delim")
+        );
+
+        if (!overrideDelimiter.isBlank()) {
+            return overrideDelimiter;
+        }
+
+        return firstNonBlank(testCase.getDelimiter(), ",");
+    }
+
+    private Set<String> splitToLowerSet(String value) {
+        if (value == null || value.trim().isBlank()) {
+            return new LinkedHashSet<>();
+        }
+
+        return java.util.Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(String::toLowerCase)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
             return "";
         }
-        String trimmed = value.trim();
-        if (trimmed.startsWith("\"") && trimmed.endsWith("\"") && trimmed.length() >= 2) {
-            return trimmed.substring(1, trimmed.length() - 1).trim();
+
+        for (String value : values) {
+            if (value != null && !value.trim().isBlank()) {
+                return value.trim();
+            }
         }
-        return trimmed;
+        return "";
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
+    }
+
+    private String ns(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    @AfterAll
+    public static void afterAll() {
+        try {
+            ExtentReportManager.flush();
+
+            String reportPath = ExtentReportManager.getReportFilePath();
+
+            System.out.println("=======================================");
+            System.out.println("EXTENT REPORT GENERATED AT:");
+            if (reportPath != null && !reportPath.isBlank()) {
+                System.out.println(reportPath);
+                System.out.println("file:///" + reportPath.replace("\\", "/"));
+            } else {
+                System.out.println("Report path is not available");
+            }
+            System.out.println("=======================================");
+
+            System.out.println("==================== TEST SUMMARY ====================");
+            System.out.println("Project      : " + System.getProperty("project", FrameworkConfig.projectName()));
+            System.out.println("Environment  : " + System.getProperty("env", FrameworkConfig.env()));
+            System.out.println("Total        : " + SummaryTracker.getTotalCount());
+            System.out.println("Passed       : " + SummaryTracker.getPassedCount());
+            System.out.println("Failed       : " + SummaryTracker.getFailedCount());
+            System.out.println("Skipped      : " + SummaryTracker.getSkippedCount());
+            System.out.println("Duration(ms) : " + SummaryTracker.getDurationMs());
+            System.out.println("======================================================");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }
