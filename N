@@ -1,54 +1,81 @@
 package com.acfc.automation.config;
 
-import java.io.InputStream;
-import java.util.Properties;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
-public final class PropertiesLoader {
+public final class FrameworkConfig {
 
-    private static Properties properties;
-    private static String loadedEnv;
-
-    private PropertiesLoader() {
+    private FrameworkConfig() {
     }
 
-    public static synchronized Properties load() {
-        String env = System.getProperty("env", "dev").trim();
-
-        if (properties != null && env.equalsIgnoreCase(loadedEnv)) {
-            return properties;
+    public static String getProperty(String key) {
+        String sysValue = System.getProperty(key);
+        if (sysValue != null && !sysValue.trim().isBlank()) {
+            return sysValue.trim();
         }
 
-        try {
-            String fileName = "config/" + env + ".properties";
-
-            InputStream is = PropertiesLoader.class
-                    .getClassLoader()
-                    .getResourceAsStream(fileName);
-
-            if (is == null) {
-                throw new RuntimeException("Config file not found: " + fileName);
-            }
-
-            Properties loaded = new Properties();
-            loaded.load(is);
-
-            properties = loaded;
-            loadedEnv = env;
-
-            System.out.println("Loaded config file: " + fileName);
-            return properties;
-
-        } catch (Exception e) {
-            throw new RuntimeException("Unable to load environment properties", e);
+        String fileValue = PropertiesLoader.get(key);
+        if (fileValue != null && !fileValue.trim().isBlank()) {
+            return fileValue.trim();
         }
+
+        return null;
     }
 
-    public static String get(String key) {
-        return load().getProperty(key);
+    public static String getProperty(String key, String defaultValue) {
+        String value = getProperty(key);
+        return (value == null || value.isBlank()) ? defaultValue : value;
     }
 
-    public static String get(String key, String defaultValue) {
-        String value = get(key);
-        return (value == null || value.trim().isBlank()) ? defaultValue : value.trim();
+    public static String env() {
+        return getProperty("env", "dev");
+    }
+
+    public static String projectName() {
+        return getProperty("project", "NA");
+    }
+
+    public static String site() {
+        return getProperty("site", "automation");
+    }
+
+    public static String release() {
+        return getProperty("release", "NA");
+    }
+
+    public static String repository() {
+        return getProperty("repository", "NA");
+    }
+
+    public static String gitBranch() {
+        return getProperty("gitBranch", "NA");
+    }
+
+    public static String buildUrl() {
+        return getProperty("buildUrl", "NA");
+    }
+
+    public static String suite() {
+        return getProperty("suite", "");
+    }
+
+    public static String type() {
+        return getProperty("type", "");
+    }
+
+    public static String ids() {
+        return getProperty("ids", "");
+    }
+
+    public static String names() {
+        return getProperty("names", "");
+    }
+
+    public static String tcFile() {
+        return getProperty("tcFile", "");
+    }
+
+    public static Path sharedContextFile() {
+        return Paths.get(getProperty("shared.context.file", "build/shared-context.json"));
     }
 }
