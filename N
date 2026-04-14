@@ -1,93 +1,13 @@
-package com.acfc.automation.report;
-
-import com.acfc.automation.model.ExecutionResult;
-
-public class SummaryTracker {
-
-    private static int total = 0;
-    private static int passed = 0;
-    private static int failed = 0;
-    private static int skipped = 0;
-
-    private static long suiteStartTime = 0;
-
-    private SummaryTracker() {
+public static String getProperty(String key, String defaultValue) {
+    String sysValue = System.getProperty(key);
+    if (sysValue != null && !sysValue.trim().isBlank()) {
+        return sysValue.trim();
     }
 
-    public static synchronized void startSuite(String name) {
-        total = 0;
-        passed = 0;
-        failed = 0;
-        skipped = 0;
-        suiteStartTime = System.currentTimeMillis();
-
-        System.out.println("===== TEST SUITE STARTED: " + name + " =====");
+    String fileValue = getProperty(key);
+    if (fileValue != null && !fileValue.trim().isBlank()) {
+        return fileValue.trim();
     }
 
-    public static synchronized void addResult(ExecutionResult result) {
-        total++;
-
-        if (result == null || result.getStatus() == null) {
-            failed++;
-            return;
-        }
-
-        String status = result.getStatus().trim().toUpperCase();
-
-        switch (status) {
-            case "PASS":
-                passed++;
-                break;
-            case "FAIL":
-                failed++;
-                break;
-            case "SKIP":
-            case "SKIPPED":
-                skipped++;
-                break;
-            default:
-                failed++;
-        }
-    }
-
-    public static synchronized int getTotalCount() {
-        return total;
-    }
-
-    public static synchronized int getPassedCount() {
-        return passed;
-    }
-
-    public static synchronized int getFailedCount() {
-        return failed;
-    }
-
-    public static synchronized int getSkippedCount() {
-        return skipped;
-    }
-
-    public static synchronized long getDurationMs() {
-        if (suiteStartTime == 0) {
-            return 0;
-        }
-        return System.currentTimeMillis() - suiteStartTime;
-    }
-
-    public static synchronized long getSuiteStartTime() {
-        return suiteStartTime;
-    }
-
-    public static synchronized long getSuiteEndTime() {
-        return suiteStartTime == 0 ? 0 : System.currentTimeMillis();
-    }
-
-    public static synchronized void printSummary() {
-        System.out.println("=====================================");
-        System.out.println("TOTAL   : " + total);
-        System.out.println("PASSED  : " + passed);
-        System.out.println("FAILED  : " + failed);
-        System.out.println("SKIPPED : " + skipped);
-        System.out.println("TIME(ms): " + getDurationMs());
-        System.out.println("=====================================");
-    }
+    return defaultValue;
 }
