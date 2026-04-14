@@ -1,13 +1,81 @@
-public static String getProperty(String key, String defaultValue) {
-    String sysValue = System.getProperty(key);
-    if (sysValue != null && !sysValue.trim().isBlank()) {
-        return sysValue.trim();
+package com.acfc.automation.config;
+
+import java.io.InputStream;
+import java.util.Properties;
+
+public final class FrameworkConfig {
+
+    private static final Properties properties = new Properties();
+    private static boolean loaded = false;
+
+    private FrameworkConfig() {
     }
 
-    String fileValue = getProperty(key);
-    if (fileValue != null && !fileValue.trim().isBlank()) {
-        return fileValue.trim();
+    private static synchronized void loadIfRequired() {
+        if (loaded) {
+            return;
+        }
+
+        try {
+            String env = System.getProperty("env");
+            if (env == null || env.trim().isBlank()) {
+                env = "dev";
+            }
+
+            String configFile = "config/" + env.trim() + ".properties";
+
+            try (InputStream input = FrameworkConfig.class.getClassLoader().getResourceAsStream(configFile)) {
+                if (input == null) {
+                    throw new RuntimeException("Unable to find config file: " + configFile);
+                }
+                properties.load(input);
+            }
+
+            loaded = true;
+            System.out.println("Loaded config file: " + configFile);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load framework config", e);
+        }
     }
 
-    return defaultValue;
+    /**
+     * Reads property from:
+     * 1. JVM system property (-Dkey=value)
+     * 2. loaded env properties file
+     * Returns null if not found
+     */
+    public static String getProperty(String key) {
+        String sysValue = System.getProperty(key);
+        if (sysValue != null && !sysValue.trim().isBlank()) {
+            return sysValue.trim();
+        }
+
+        loadIfRequired();
+
+        String fileValue = properties.getProperty(key);
+        if (fileValue != null && !fileValue.trim().isBlank()) {
+            return fileValue.trim();
+        }
+
+        return null;
+    }
+
+    /**
+     * Reads property from:
+     * 1. JVM system property (-Dkey=value)
+     * 2. loaded env properties file
+     * 3. default value
+     */
+    public static String getProperty(String key, String defaultValue) {
+        String value = getProperty(key);
+        return (value == null || value.isBlank()) ? defaultValue : value;
+    }
+
+    public static String env() {
+        return getProperty("env", "dev");
+    }
+
+    public static String projectName() {
+        return getProperty("project", "NA");
+    }
 }
