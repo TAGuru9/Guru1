@@ -1,0 +1,87 @@
+PepperAPI Automation Framework – Complete Training Guide
+
+1. Overview
+PepperAPI is a config-driven API automation framework that allows QA teams to build and run API tests using JSON and CSV without writing code.
+
+2. Project Structure
+src/test/resources/
+config/
+payloads/templates/
+testcases/
+testdata/
+
+3. How QA Creates a Testcase (Step-by-Step)
+Step 1: Create JSON file in testcases folder
+
+Step 2: Create payload template
+
+Step 3: Add CSV (if loop required)
+
+Step 4: Add validations
+
+Step 5: Run using command
+
+4. Sample JSON Testcase
+{
+ "id": "ME001",
+ "method": "POST",
+ "payloadFile": "payloads/templates/template.xml",
+ "expectedStatus": 200
+}
+
+5. Loop JSON + CSV Example
+{
+ "id": "ME006",
+ "loopEnabled": true,
+ "dataFile": "testdata/member_data.csv"
+}
+
+subscriberID,expectedStatus
+51335970,200
+BAD001,400
+
+6. Payload Template Example
+<SubscriberID>${subscriberID}</SubscriberID>
+
+7. Validation Types
+Status, Body Contains, XPath, DB vs Response, File vs Response
+
+8. DB Validation Example
+"dbQuery": {
+ "query": "select first_name from members where subscriber_id='${subscriberID}'",
+ "storeAs": "dbFirstName"
+}
+
+9. API Chaining Example
+Extraction:
+"extractions": [{"key":"memberId","xpath":"//MemberID/text()"}]
+
+Usage:
+<MemberID>${memberId}</MemberID>
+
+10. Negative Testing
+"failIfBodyContains": ["ERROR_STATUS","Invalid external user"]
+
+11. Execution Commands
+Run by ID:
+gradlew.bat :project-memberEligibility:test -Denv=dev -Dids=ME001
+
+Run loop:
+-Dids=ME006
+
+12. Common Errors & Fixes
+- Wrong file path → use relative path
+
+- Duplicate ID → keep unique
+
+- CSV mismatch → align with payload
+
+13. Best Practices
+- Use CSV for variations
+
+- Keep JSON reusable
+
+- Use XPath for precision
+
+14. Goal
+Enable QA to automate APIs without coding and run from Jenkins or CLI.
