@@ -1,37 +1,112 @@
-package com.acfc.automation.util;
+package com.acfc.automation.data;
 
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import com.acfc.automation.model.TestCase;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-public class PlaceholderResolver {
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Stream;
 
-    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{([^}]+)}");
+public final class TestCaseLoader {
 
-    private PlaceholderResolver() {
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+    private TestCaseLoader() {
     }
 
-    public static String resolve(String content, Map<String, Object> context) {
-        if (content == null) {
-            return null;
+    private static String getProject() {
+        return System.getProperty("project", "").trim();
+    }
+
+    public static List<TestCase> parse(String filePath) {
+        try {
+            String project = getProject();
+
+            Path path = Paths.get(filePath);
+
+            if (!Files.exists(path)) {
+                path = Paths.get("src", "test", "resources")
+                        .resolve(filePath)
+                        .normalize();
+            }
+
+            if (!Files.exists(path) && !project.isEmpty()) {
+                path = Paths.get(project, "src", "test", "resources")
+                        .resolve(filePath)
+                        .normalize();
+            }
+
+            if (!Files.exists(path)) {
+                throw new RuntimeException("Test case file not found: " + filePath);
+            }
+
+            System.out.println("Parsing testcase from: " + path.toAbsolutePath());
+
+            TestCase testCase = MAPPER.readValue(path.toFile(), TestCase.class);
+
+            List<TestCase> list = new ArrayList<>();
+            list.add(testCase);
+            return list;
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load test case: " + filePath, e);
         }
+    }
 
-        if (context == null || context.isEmpty()) {
-            return content;
+    public static List<TestCase> loadAll() {
+        try {
+            List<TestCase> cases = new ArrayList<>();
+            String project = getProject();
+
+            List<Path> candidateDirs = new ArrayList<>();
+
+            // 1. Local module
+            candidateDirs.add(Paths.get("src", "test", "resources", "testcases"));
+
+            // 2. From project argument
+            if (!project.isEmpty()) {
+                candidateDirs.add(Paths.get(project, "src", "test", "resources", "testcases"));
+            }
+
+            Path dir = null;
+
+            for (Path candidate : candidateDirs) {
+                if (Files.exists(candidate)) {
+                    dir = candidate;
+                    break;
+                }
+            }
+
+            if (dir == null) {
+                System.out.println("No testcase directory found.");
+                return cases;
+            }
+
+            System.out.println("Loading testcases from: " + dir.toAbsolutePath());
+
+            try (Stream<Path> stream = Files.list(dir)) {
+                List<Path> files = stream
+                        .filter(Files::isRegularFile)
+                        .filter(p -> p.toString().toLowerCase().endsWith(".json"))
+                        .sorted(Comparator.comparing(Path::toString))
+                        .toList();
+
+                for (Path file : files) {
+                    TestCase testCase = MAPPER.readValue(file.toFile(), TestCase.class);
+                    cases.add(testCase);
+                }
+            }
+
+            return cases;
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load test cases", e);
         }
-
-        Matcher matcher = PLACEHOLDER_PATTERN.matcher(content);
-        StringBuffer resolved = new StringBuffer();
-
-        while (matcher.find()) {
-            String key = matcher.group(1).trim();
-            Object value = context.get(key);
-
-            String replacement = value == null ? "" : String.valueOf(value);
-            matcher.appendReplacement(resolved, Matcher.quoteReplacement(replacement));
-        }
-
-        matcher.appendTail(resolved);
-        return resolved.toString();
     }
 }
