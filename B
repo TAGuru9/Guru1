@@ -1,31 +1,41 @@
-plugins {
-    id 'java'
-}
+package com.acfc.automation.model;
 
-dependencies {
-    implementation project(':core')
+public class FileVsResponseComparison {
 
-    testImplementation platform('org.junit:junit-bom:5.10.2')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
-}
+    private String fileColumn;
+    private String responsePath;
+    private String operator;   // equals, contains, etc.
+    private String message;
 
-test {
-    useJUnitPlatform()
-    include '**/*Test.class'
-    systemProperties(System.getProperties())
-
-    doFirst {
-        println "DEBUG build.gradle tcFile   = ${System.getProperty('tcFile')}"
-        println "DEBUG build.gradle tcfile   = ${System.getProperty('tcfile')}"
-        println "DEBUG build.gradle ids      = ${System.getProperty('ids')}"
-        println "DEBUG build.gradle names    = ${System.getProperty('names')}"
-        println "DEBUG build.gradle dataFile = ${System.getProperty('dataFile')}"
-        println "DEBUG build.gradle datafile = ${System.getProperty('datafile')}"
+    public String getFileColumn() {
+        return fileColumn;
     }
 
-    testLogging {
-        events 'passed', 'failed', 'skipped', 'standard_out', 'standard_error'
-        showStandardStreams = true
-        exceptionFormat 'full'
+    public void setFileColumn(String fileColumn) {
+        this.fileColumn = fileColumn;
+    }
+
+    public String getResponsePath() {
+        return responsePath;
+    }
+
+    public void setResponsePath(String responsePath) {
+        this.responsePath = responsePath;
+    }
+
+    public String getOperator() {
+        return operator;
+    }
+
+    public void setOperator(String operator) {
+        this.operator = operator;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
     }
 }
