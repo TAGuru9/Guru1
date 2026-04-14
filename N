@@ -1,81 +1,62 @@
-package com.acfc.automation.config;
+package com.acfc.automation.payload;
 
+import com.acfc.automation.util.FileUtil;
+import com.acfc.automation.util.PlaceholderResolver;
+
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Map;
 
-public final class FrameworkConfig {
+public class PayloadBuilder {
 
-    private FrameworkConfig() {
-    }
+    public static String build(String inlineBody,
+                               String bodyFile,
+                               String requestTemplate,
+                               Map<String, Object> context,
+                               String testId) {
+        try {
+            String content = null;
 
-    public static String getProperty(String key) {
-        String sysValue = System.getProperty(key);
-        if (sysValue != null && !sysValue.trim().isBlank()) {
-            return sysValue.trim();
+            if (inlineBody != null && !inlineBody.isBlank()) {
+                content = inlineBody;
+            } else if (bodyFile != null && !bodyFile.isBlank()) {
+                Path bodyPath = Paths.get(bodyFile);
+
+                if (!Files.exists(bodyPath)) {
+                    bodyPath = Paths.get("src", "test", "resources")
+                            .resolve(bodyFile)
+                            .normalize();
+                }
+
+                content = FileUtil.read(bodyPath);
+            } else if (requestTemplate != null && !requestTemplate.isBlank()) {
+                Path templatePath = Paths.get(requestTemplate);
+
+                if (!Files.exists(templatePath)) {
+                    templatePath = Paths.get("src", "test", "resources")
+                            .resolve(requestTemplate)
+                            .normalize();
+                }
+
+                content = FileUtil.read(templatePath);
+            }
+
+            if (content == null) {
+                return null;
+            }
+
+            String resolved = PlaceholderResolver.resolve(content, context);
+
+            Path outDir = Paths.get("build", "generated-payloads");
+            Files.createDirectories(outDir);
+
+            Path out = outDir.resolve(testId + "-request.json");
+            FileUtil.write(out, resolved);
+
+            return resolved;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to build payload for test: " + testId, e);
         }
-
-        String fileValue = PropertiesLoader.get(key);
-        if (fileValue != null && !fileValue.trim().isBlank()) {
-            return fileValue.trim();
-        }
-
-        return null;
-    }
-
-    public static String getProperty(String key, String defaultValue) {
-        String value = getProperty(key);
-        return (value == null || value.isBlank()) ? defaultValue : value;
-    }
-
-    public static String env() {
-        return getProperty("env", "dev");
-    }
-
-    public static String projectName() {
-        return getProperty("project", "NA");
-    }
-
-    public static String site() {
-        return getProperty("site", "automation");
-    }
-
-    public static String release() {
-        return getProperty("release", "NA");
-    }
-
-    public static String repository() {
-        return getProperty("repository", "NA");
-    }
-
-    public static String gitBranch() {
-        return getProperty("gitBranch", "NA");
-    }
-
-    public static String buildUrl() {
-        return getProperty("buildUrl", "NA");
-    }
-
-    public static String suite() {
-        return getProperty("suite", "");
-    }
-
-    public static String type() {
-        return getProperty("type", "");
-    }
-
-    public static String ids() {
-        return getProperty("ids", "");
-    }
-
-    public static String names() {
-        return getProperty("names", "");
-    }
-
-    public static String tcFile() {
-        return getProperty("tcFile", "");
-    }
-
-    public static Path sharedContextFile() {
-        return Paths.get(getProperty("shared.context.file", "build/shared-context.json"));
     }
 }
