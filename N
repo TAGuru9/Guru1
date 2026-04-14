@@ -1,74 +1,48 @@
 package com.acfc.automation.report.kpi;
 
-import com.acfc.automation.config.FrameworkConfig;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.time.LocalDateTime;
+public class KpiArgsParser {
 
-public class KpiDbSummaryReporter {
+    private KpiArgsParser() {
+    }
 
-    public static void writeSummary(String project,
-                                    String suite,
-                                    String type,
-                                    String env,
-                                    int total,
-                                    int passed,
-                                    int failed,
-                                    int skipped,
-                                    long durationMs,
-                                    String reportPath) {
+    public static Map<String, String> parse(String raw) {
+        Map<String, String> map = new LinkedHashMap<>();
 
-        try {
-            boolean enabled = Boolean.parseBoolean(
-                    FrameworkConfig.getProperty("kpi.db.enabled", "false")
-            );
+        if (raw == null || raw.trim().isBlank()) {
+            return map;
+        }
 
-            if (!enabled) return;
-
-            String url = FrameworkConfig.getProperty("kpi.db.url");
-            String user = FrameworkConfig.getProperty("kpi.db.username");
-            String pass = FrameworkConfig.getProperty("kpi.db.password");
-            String driver = FrameworkConfig.getProperty("kpi.db.driver");
-
-            Class.forName(driver);
-
-            String sql = "INSERT INTO ta_reporting.ta_model ("
-                    + "TA_FRAMEWORK, TA_SITE, TA_APPLICATION, TA_ENVTYPE, "
-                    + "TA_TESTSUITE_TYPE, TA_STATUS, TA_PASS, TA_FAIL, TA_SKIPWARN, "
-                    + "TA_PERCENTAGE, TA_BUILD_URL, TA_Start_Date_Time, TA_End_Date_Time"
-                    + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-
-            try (Connection conn = DriverManager.getConnection(url, user, pass);
-                 PreparedStatement ps = conn.prepareStatement(sql)) {
-
-                int percentage = total == 0 ? 0 : (passed * 100 / total);
-
-                ps.setString(1, "PepperAPI"); // framework name
-                ps.setString(2, "automation"); // site/team
-                ps.setString(3, project);
-                ps.setString(4, env);
-                ps.setString(5, type);
-
-                ps.setString(6, failed > 0 ? "FAIL" : "PASS");
-                ps.setInt(7, passed);
-                ps.setInt(8, failed);
-                ps.setInt(9, skipped);
-                ps.setInt(10, percentage);
-
-                ps.setString(11, reportPath);
-
-                ps.setObject(12, LocalDateTime.now().minusSeconds(durationMs / 1000));
-                ps.setObject(13, LocalDateTime.now());
-
-                ps.executeUpdate();
+        String[] pairs = raw.split(";");
+        for (String pair : pairs) {
+            if (pair == null || pair.trim().isBlank()) {
+                continue;
             }
 
-            System.out.println("✅ KPI Summary inserted into ta_model table");
+            int idx = pair.indexOf('=');
+            if (idx <= 0) {
+                continue;
+            }
 
-        } catch (Exception e) {
-            System.out.println("❌ Failed to insert into ta_model: " + e.getMessage());
+            String key = pair.substring(0, idx).trim();
+            String value = pair.substring(idx + 1).trim();
+
+            if (!key.isBlank()) {
+                map.put(key, value);
+            }
         }
+
+        return map;
+    }
+
+    public static String get(Map<String, String> map, String key, String defaultValue) {
+        if (map == null) {
+            return defaultValue;
+        }
+
+        String value = map.get(key);
+        return (value == null || value.trim().isBlank()) ? defaultValue : value.trim();
     }
 }
