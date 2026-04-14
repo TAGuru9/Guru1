@@ -1,41 +1,73 @@
-package com.acfc.automation.model;
+package com.acfc.automation.data;
 
-public class FileVsResponseComparison {
+import com.acfc.automation.config.FrameworkConfig;
+import com.acfc.automation.model.TestCase;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-    private String fileColumn;
-    private String responsePath;
-    private String operator;   // equals, contains, etc.
-    private String message;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Stream;
 
-    public String getFileColumn() {
-        return fileColumn;
+public class TestCaseLoader {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    private TestCaseLoader() {
     }
 
-    public void setFileColumn(String fileColumn) {
-        this.fileColumn = fileColumn;
+    public static List<TestCase> parse(String filePath) {
+        try {
+            Path path = FrameworkConfig.testResourcesDir().resolve(filePath).normalize();
+
+            if (!Files.exists(path)) {
+                path = Path.of(filePath);
+            }
+
+            if (!Files.exists(path)) {
+                throw new RuntimeException("Test case file not found: " + filePath);
+            }
+
+            TestCase testCase = MAPPER.readValue(path.toFile(), TestCase.class);
+            List<TestCase> list = new ArrayList<>();
+            list.add(testCase);
+            return list;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load test case: " + filePath, e);
+        }
     }
 
-    public String getResponsePath() {
-        return responsePath;
-    }
+    public static List<TestCase> loadAll() {
+        try {
+            List<TestCase> cases = new ArrayList<>();
+            Path dir = FrameworkConfig.testResourcesDir().resolve("testcases");
 
-    public void setResponsePath(String responsePath) {
-        this.responsePath = responsePath;
-    }
+            if (!Files.exists(dir)) {
+                return cases;
+            }
 
-    public String getOperator() {
-        return operator;
-    }
+            try (Stream<Path> stream = Files.list(dir)) {
+                List<Path> files = stream
+                        .filter(Files::isRegularFile)
+                        .filter(p -> p.toString().toLowerCase().endsWith(".json"))
+                        .sorted()
+                        .toList();
 
-    public void setOperator(String operator) {
-        this.operator = operator;
-    }
+                for (Path file : files) {
+                    try {
+                        TestCase testCase = MAPPER.readValue(file.toFile(), TestCase.class);
+                        cases.add(testCase);
+                    } catch (Exception e) {
+                        System.out.println("WARNING: Skipping invalid testcase file: " + file);
+                        System.out.println("Reason: " + e.getMessage());
+                    }
+                }
+            }
 
-    public String getMessage() {
-        return message;
-    }
-
-    public void setMessage(String message) {
-        this.message = message;
+            return cases;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load testcases", e);
+        }
     }
 }
