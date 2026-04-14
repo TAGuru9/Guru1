@@ -1,81 +1,37 @@
-package com.acfc.automation.config;
+package com.acfc.automation.util;
 
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-public final class FrameworkConfig {
+public class PlaceholderResolver {
 
-    private FrameworkConfig() {
+    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{([^}]+)}");
+
+    private PlaceholderResolver() {
     }
 
-    public static String getProperty(String key) {
-        String sysValue = System.getProperty(key);
-        if (sysValue != null && !sysValue.trim().isBlank()) {
-            return sysValue.trim();
+    public static String resolve(String content, Map<String, Object> context) {
+        if (content == null) {
+            return null;
         }
 
-        String fileValue = PropertiesLoader.get(key);
-        if (fileValue != null && !fileValue.trim().isBlank()) {
-            return fileValue.trim();
+        if (context == null || context.isEmpty()) {
+            return content;
         }
 
-        return null;
-    }
+        Matcher matcher = PLACEHOLDER_PATTERN.matcher(content);
+        StringBuffer resolved = new StringBuffer();
 
-    public static String getProperty(String key, String defaultValue) {
-        String value = getProperty(key);
-        return (value == null || value.isBlank()) ? defaultValue : value;
-    }
+        while (matcher.find()) {
+            String key = matcher.group(1).trim();
+            Object value = context.get(key);
 
-    public static String env() {
-        return getProperty("env", "dev");
-    }
+            String replacement = value == null ? "" : String.valueOf(value);
+            matcher.appendReplacement(resolved, Matcher.quoteReplacement(replacement));
+        }
 
-    public static String projectName() {
-        return getProperty("project", "NA");
-    }
-
-    public static String site() {
-        return getProperty("site", "automation");
-    }
-
-    public static String release() {
-        return getProperty("release", "NA");
-    }
-
-    public static String repository() {
-        return getProperty("repository", "NA");
-    }
-
-    public static String gitBranch() {
-        return getProperty("gitBranch", "NA");
-    }
-
-    public static String buildUrl() {
-        return getProperty("buildUrl", "NA");
-    }
-
-    public static String suite() {
-        return getProperty("suite", "");
-    }
-
-    public static String type() {
-        return getProperty("type", "");
-    }
-
-    public static String ids() {
-        return getProperty("ids", "");
-    }
-
-    public static String names() {
-        return getProperty("names", "");
-    }
-
-    public static String tcFile() {
-        return getProperty("tcFile", "");
-    }
-
-    public static Path sharedContextFile() {
-        return Paths.get(getProperty("shared.context.file", "build/shared-context.json"));
+        matcher.appendTail(resolved);
+        return resolved.toString();
     }
 }
