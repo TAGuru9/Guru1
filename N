@@ -2,104 +2,82 @@ package com.acfc.automation.report.kpi;
 
 import com.acfc.automation.config.FrameworkConfig;
 
-import java.util.Map;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.Timestamp;
 
-public class KpiRuntimeParams {
+public class KpiDbSummaryReporter {
 
-    private static Map<String, String> parsedArgs;
-
-    private KpiRuntimeParams() {
+    private KpiDbSummaryReporter() {
     }
 
-    private static Map<String, String> args() {
-        if (parsedArgs == null) {
-            parsedArgs = KpiArgsParser.parse(
-                    FrameworkConfig.getProperty("kpiArgs", "")
+    public static void writeSummary(int total,
+                                    int passed,
+                                    int failed,
+                                    int skipped,
+                                    long durationMs,
+                                    String reportPath,
+                                    long suiteStartTime,
+                                    long suiteEndTime) {
+        try {
+            boolean enabled = Boolean.parseBoolean(
+                    FrameworkConfig.getProperty("kpi.db.enabled", "false")
             );
+
+            if (!enabled) {
+                return;
+            }
+
+            String url = FrameworkConfig.getProperty("kpi.db.url");
+            String user = FrameworkConfig.getProperty("kpi.db.username");
+            String pass = FrameworkConfig.getProperty("kpi.db.password");
+            String driver = FrameworkConfig.getProperty("kpi.db.driver");
+
+            Class.forName(driver);
+
+            String sql = "INSERT INTO ta_reporting.ta_model ("
+                    + "TA_FRAMEWORK, TA_SITE, TA_CHANGEID, TA_PRODUCT, TA_APPLICATION, "
+                    + "TA_ENVTYPE, TA_RELEASE, TA_TESTSUITE_TYPE, TA_REPOSITORY, "
+                    + "TA_BUILD_GIT_BRANCH, TA_TESTSUITE_ARGS, TA_USERID, TA_STATUS, "
+                    + "TA_PASS, TA_FAIL, TA_SKIPWARN, TA_PERCENTAGE, TA_TSID, "
+                    + "TA_BUILD_URL, TA_Start_Date_Time, TA_End_Date_Time"
+                    + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+            try (Connection conn = DriverManager.getConnection(url, user, pass);
+                 PreparedStatement ps = conn.prepareStatement(sql)) {
+
+                int percentage = total == 0 ? 0 : (passed * 100 / total);
+                String finalStatus = failed > 0 ? "FAIL" : "PASS";
+
+                ps.setString(1, KpiRuntimeParams.framework());
+                ps.setString(2, KpiRuntimeParams.site());
+                ps.setString(3, KpiRuntimeParams.changeId());
+                ps.setString(4, KpiRuntimeParams.product());
+                ps.setString(5, KpiRuntimeParams.application());
+                ps.setString(6, KpiRuntimeParams.envType());
+                ps.setString(7, KpiRuntimeParams.release());
+                ps.setString(8, KpiRuntimeParams.testSuiteType());
+                ps.setString(9, KpiRuntimeParams.repository());
+                ps.setString(10, KpiRuntimeParams.gitBranch());
+                ps.setString(11, KpiRuntimeParams.testSuiteArgs(reportPath));
+                ps.setString(12, KpiRuntimeParams.userId());
+                ps.setString(13, finalStatus);
+                ps.setInt(14, passed);
+                ps.setInt(15, failed);
+                ps.setInt(16, skipped);
+                ps.setInt(17, percentage);
+                ps.setString(18, KpiReporter.getRunId());
+                ps.setString(19, "NA".equalsIgnoreCase(KpiRuntimeParams.buildUrl()) ? reportPath : KpiRuntimeParams.buildUrl());
+                ps.setTimestamp(20, new Timestamp(suiteStartTime));
+                ps.setTimestamp(21, new Timestamp(suiteEndTime));
+
+                ps.executeUpdate();
+            }
+
+            System.out.println("KPI summary inserted into ta_reporting.ta_model");
+        } catch (Exception e) {
+            System.out.println("Failed to insert KPI summary into MySQL: " + e.getMessage());
         }
-        return parsedArgs;
-    }
-
-    public static String framework() {
-        return KpiArgsParser.get(args(), "framework", "PepperAPI");
-    }
-
-    public static String site() {
-        return KpiArgsParser.get(args(), "site", "automation");
-    }
-
-    public static String changeId() {
-        return KpiArgsParser.get(args(), "changeId", "NA");
-    }
-
-    public static String product() {
-        return KpiArgsParser.get(args(), "product", "NA");
-    }
-
-    public static String application() {
-        return KpiArgsParser.get(args(), "application", FrameworkConfig.projectName());
-    }
-
-    public static String envType() {
-        return KpiArgsParser.get(args(), "env", FrameworkConfig.env());
-    }
-
-    public static String release() {
-        return KpiArgsParser.get(args(), "release", "NA");
-    }
-
-    public static String testSuiteType() {
-        return KpiArgsParser.get(args(), "testSuiteType",
-                FrameworkConfig.getProperty("type", "NA"));
-    }
-
-    public static String repository() {
-        return KpiArgsParser.get(args(), "repository", "NA");
-    }
-
-    public static String gitBranch() {
-        return KpiArgsParser.get(args(), "gitBranch", "NA");
-    }
-
-    public static String userId() {
-        return KpiArgsParser.get(args(), "userId",
-                System.getProperty("user.name", "NA"));
-    }
-
-    public static String buildUrl() {
-        return KpiArgsParser.get(args(), "buildUrl", "NA");
-    }
-
-    public static String testSuiteArgs(String reportPath) {
-        String userId = KpiArgsParser.get(args(), "userId",
-                System.getProperty("user.name", "NA"));
-
-        String password = KpiArgsParser.get(args(), "password", "NA");
-        if (!"NA".equalsIgnoreCase(password)) {
-            password = "******";
-        }
-
-        String reportFile = extractReportName(reportPath);
-
-        return "userId=" + safe(userId)
-                + ",password=" + safe(password)
-                + ",report=" + safe(reportFile);
-    }
-
-    private static String extractReportName(String path) {
-        if (path == null || path.isBlank()) {
-            return "NA";
-        }
-
-        int idx = path.lastIndexOf('/');
-        if (idx == -1) {
-            idx = path.lastIndexOf('\\');
-        }
-
-        return idx != -1 ? path.substring(idx + 1) : path;
-    }
-
-    private static String safe(String value) {
-        return value == null || value.isBlank() ? "NA" : value.trim();
     }
 }
