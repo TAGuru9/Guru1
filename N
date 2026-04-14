@@ -30,6 +30,7 @@ public class PayloadBuilder {
                 }
 
                 content = FileUtil.read(bodyPath);
+
             } else if (requestTemplate != null && !requestTemplate.isBlank()) {
                 Path templatePath = Paths.get(requestTemplate);
 
@@ -55,6 +56,7 @@ public class PayloadBuilder {
             FileUtil.write(out, resolved);
 
             return resolved;
+
         } catch (Exception e) {
             throw new RuntimeException("Failed to build payload for test: " + testId, e);
         }
