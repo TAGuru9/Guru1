@@ -1,122 +1,132 @@
 package com.acfc.automation.report.kpi;
 
-public class KpiEntry {
+import java.io.FileWriter;
+import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
-    private String project;
-    private String suite;
-    private String type;
-    private String env;
-    private String tcId;
-    private String tcName;
-    private String executionMode;
-    private String iteration;
-    private String status;
-    private long durationMs;
-    private String dataFile;
-    private String reportPath;
-    private String errorMessage;
+public class KpiReporter {
 
-    public String getProject() {
-        return project;
+    private static final Object LOCK = new Object();
+    private static String runId;
+
+    private KpiReporter() {
     }
 
-    public void setProject(String project) {
-        this.project = project;
+    public static void initRun() {
+        if (runId == null) {
+            runId = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        }
     }
 
-    public String getSuite() {
-        return suite;
+    public static String getRunId() {
+        initRun();
+        return runId;
     }
 
-    public void setSuite(String suite) {
-        this.suite = suite;
+    public static void writeTestcaseKpi(KpiEntry entry) {
+        initRun();
+
+        try {
+            Path dir = Paths.get(
+                    safe(entry.getProject()),
+                    "build",
+                    "reports",
+                    "kpi"
+            );
+            Files.createDirectories(dir);
+
+            Path file = dir.resolve("kpi_" + runId + ".csv");
+            boolean newFile = !Files.exists(file);
+
+            synchronized (LOCK) {
+                try (PrintWriter writer = new PrintWriter(new FileWriter(file.toFile(), true))) {
+                    if (newFile) {
+                        writer.println("runId,project,suite,type,env,tcId,tcName,executionMode,iteration,status,durationMs,dataFile,reportPath,errorMessage");
+                    }
+
+                    writer.println(csv(runId) + ","
+                            + csv(entry.getProject()) + ","
+                            + csv(entry.getSuite()) + ","
+                            + csv(entry.getType()) + ","
+                            + csv(entry.getEnv()) + ","
+                            + csv(entry.getTcId()) + ","
+                            + csv(entry.getTcName()) + ","
+                            + csv(entry.getExecutionMode()) + ","
+                            + csv(entry.getIteration()) + ","
+                            + csv(entry.getStatus()) + ","
+                            + entry.getDurationMs() + ","
+                            + csv(entry.getDataFile()) + ","
+                            + csv(entry.getReportPath()) + ","
+                            + csv(entry.getErrorMessage()));
+                }
+            }
+
+            System.out.println("KPI written for testcase: " + safe(entry.getTcId()));
+        } catch (Exception e) {
+            System.out.println("Failed to write testcase KPI: " + e.getMessage());
+        }
     }
 
-    public String getType() {
-        return type;
+    public static void writeSuiteSummaryKpi(String project,
+                                            String suite,
+                                            String type,
+                                            String env,
+                                            int total,
+                                            int passed,
+                                            int failed,
+                                            int skipped,
+                                            long durationMs,
+                                            String reportPath) {
+        initRun();
+
+        try {
+            Path dir = Paths.get(
+                    safe(project),
+                    "build",
+                    "reports",
+                    "kpi"
+            );
+            Files.createDirectories(dir);
+
+            Path file = dir.resolve("kpi_summary_" + runId + ".csv");
+            boolean newFile = !Files.exists(file);
+
+            synchronized (LOCK) {
+                try (PrintWriter writer = new PrintWriter(new FileWriter(file.toFile(), true))) {
+                    if (newFile) {
+                        writer.println("runId,project,suite,type,env,total,passed,failed,skipped,durationMs,reportPath");
+                    }
+
+                    writer.println(csv(runId) + ","
+                            + csv(project) + ","
+                            + csv(suite) + ","
+                            + csv(type) + ","
+                            + csv(env) + ","
+                            + total + ","
+                            + passed + ","
+                            + failed + ","
+                            + skipped + ","
+                            + durationMs + ","
+                            + csv(reportPath));
+                }
+            }
+
+            System.out.println("KPI suite summary written.");
+        } catch (Exception e) {
+            System.out.println("Failed to write suite KPI summary: " + e.getMessage());
+        }
     }
 
-    public void setType(String type) {
-        this.type = type;
+    private static String csv(String value) {
+        String v = safe(value).replace("\"", "\"\"");
+        return "\"" + v + "\"";
     }
 
-    public String getEnv() {
-        return env;
-    }
-
-    public void setEnv(String env) {
-        this.env = env;
-    }
-
-    public String getTcId() {
-        return tcId;
-    }
-
-    public void setTcId(String tcId) {
-        this.tcId = tcId;
-    }
-
-    public String getTcName() {
-        return tcName;
-    }
-
-    public void setTcName(String tcName) {
-        this.tcName = tcName;
-    }
-
-    public String getExecutionMode() {
-        return executionMode;
-    }
-
-    public void setExecutionMode(String executionMode) {
-        this.executionMode = executionMode;
-    }
-
-    public String getIteration() {
-        return iteration;
-    }
-
-    public void setIteration(String iteration) {
-        this.iteration = iteration;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
-    }
-
-    public long getDurationMs() {
-        return durationMs;
-    }
-
-    public void setDurationMs(long durationMs) {
-        this.durationMs = durationMs;
-    }
-
-    public String getDataFile() {
-        return dataFile;
-    }
-
-    public void setDataFile(String dataFile) {
-        this.dataFile = dataFile;
-    }
-
-    public String getReportPath() {
-        return reportPath;
-    }
-
-    public void setReportPath(String reportPath) {
-        this.reportPath = reportPath;
-    }
-
-    public String getErrorMessage() {
-        return errorMessage;
-    }
-
-    public void setErrorMessage(String errorMessage) {
-        this.errorMessage = errorMessage;
+    private static String safe(String value) {
+        return value == null || value.isBlank() ? "NA" : value.trim();
     }
 }
