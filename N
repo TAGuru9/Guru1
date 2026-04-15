@@ -1,42 +1,68 @@
-package com.acfc.automation.util;
+package com.acfc.automation.payload;
+
+import com.acfc.automation.util.FileUtil;
+import com.acfc.automation.util.PlaceholderResolver;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Map;
 
-public class TestDataReader {
+public class PayloadBuilder {
 
-    private TestDataReader() {
+    private PayloadBuilder() {
     }
 
-    public static Path resolve(String filePath) {
-        if (filePath == null || filePath.isBlank()) {
-            throw new IllegalArgumentException("File path is blank");
+    public static String build(String inlineBody,
+                               String bodyFile,
+                               String requestTemplate,
+                               Map<String, Object> context,
+                               String testId) {
+        try {
+            String content = null;
+
+            if (inlineBody != null && !inlineBody.isBlank()) {
+                content = inlineBody;
+
+            } else if (bodyFile != null && !bodyFile.isBlank()) {
+                Path bodyPath = Paths.get(bodyFile);
+
+                if (!Files.exists(bodyPath)) {
+                    bodyPath = Paths.get("src", "test", "resources")
+                            .resolve(bodyFile)
+                            .normalize();
+                }
+
+                content = FileUtil.read(bodyPath);
+
+            } else if (requestTemplate != null && !requestTemplate.isBlank()) {
+                Path templatePath = Paths.get(requestTemplate);
+
+                if (!Files.exists(templatePath)) {
+                    templatePath = Paths.get("src", "test", "resources")
+                            .resolve(requestTemplate)
+                            .normalize();
+                }
+
+                content = FileUtil.read(templatePath);
+            }
+
+            if (content == null) {
+                return null;
+            }
+
+            String resolved = PlaceholderResolver.resolve(content, context);
+
+            Path outDir = Paths.get("build", "generated-payloads");
+            Files.createDirectories(outDir);
+
+            Path out = outDir.resolve(testId + "-request.json");
+            FileUtil.write(out, resolved);
+
+            return resolved;
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to build payload for test: " + testId, e);
         }
-
-        Path directPath = Paths.get(filePath);
-        if (Files.exists(directPath)) {
-            return directPath.toAbsolutePath().normalize();
-        }
-
-        Path resourcePath = Paths.get("src", "test", "resources")
-                .resolve(filePath)
-                .normalize();
-
-        if (Files.exists(resourcePath)) {
-            return resourcePath.toAbsolutePath().normalize();
-        }
-
-        throw new RuntimeException(
-                "Test data file not found. Checked: " + directPath + " and " + resourcePath
-        );
-    }
-
-    public static String getFileType(String filePath) {
-        int idx = filePath.lastIndexOf('.');
-        if (idx <= 0 || idx == filePath.length() - 1) {
-            throw new IllegalArgumentException("Invalid file path: " + filePath);
-        }
-        return filePath.substring(idx + 1).toLowerCase();
     }
 }
