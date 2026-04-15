@@ -1,83 +1,130 @@
-package com.acfc.automation.report.kpi;
+package com.acfc.automation.data;
 
 import com.acfc.automation.config.FrameworkConfig;
+import com.acfc.automation.model.TestCase;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.Timestamp;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Stream;
 
-public class KpiDbSummaryReporter {
+public final class TestCaseLoader {
 
-    private KpiDbSummaryReporter() {
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+    private TestCaseLoader() {
     }
 
-    public static void writeSummary(int total,
-                                    int passed,
-                                    int failed,
-                                    int skipped,
-                                    long durationMs,
-                                    String reportPath,
-                                    long suiteStartTime,
-                                    long suiteEndTime) {
-        try {
-            boolean enabled = Boolean.parseBoolean(
-                    FrameworkConfig.getProperty("kpi.db.enabled", "false")
-            );
-
-            if (!enabled) {
-                return;
-            }
-
-            String url = FrameworkConfig.getProperty("kpi.db.url");
-            String user = FrameworkConfig.getProperty("kpi.db.username");
-            String pass = FrameworkConfig.getProperty("kpi.db.password");
-            String driver = FrameworkConfig.getProperty("kpi.db.driver");
-
-            Class.forName(driver);
-
-            String sql = "INSERT INTO ta_reporting.ta_model ("
-                    + "TA_FRAMEWORK, TA_SITE, TA_CHANGEID, TA_PRODUCT, TA_APPLICATION, "
-                    + "TA_ENVTYPE, TA_RELEASE, TA_TESTSUITE_TYPE, TA_REPOSITORY, "
-                    + "TA_BUILD_GIT_BRANCH, TA_TESTSUITE_ARGS, TA_USERID, TA_STATUS, "
-                    + "TA_PASS, TA_FAIL, TA_SKIPWARN, TA_PERCENTAGE, TA_TSID, "
-                    + "TA_BUILD_URL, TA_Start_Date_Time, TA_End_Date_Time"
-                    + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-
-            try (Connection conn = DriverManager.getConnection(url, user, pass);
-                 PreparedStatement ps = conn.prepareStatement(sql)) {
-
-                int percentage = total == 0 ? 0 : (passed * 100 / total);
-                String finalStatus = failed > 0 ? "FAIL" : "PASS";
-
-                ps.setString(1, KpiRuntimeParams.framework());
-                ps.setString(2, KpiRuntimeParams.site());
-                ps.setString(3, KpiRuntimeParams.changeId());
-                ps.setString(4, KpiRuntimeParams.product());
-                ps.setString(5, KpiRuntimeParams.application());
-                ps.setString(6, KpiRuntimeParams.envType());
-                ps.setString(7, KpiRuntimeParams.release());
-                ps.setString(8, KpiRuntimeParams.testSuiteType());
-                ps.setString(9, KpiRuntimeParams.repository());
-                ps.setString(10, KpiRuntimeParams.gitBranch());
-                ps.setString(11, KpiRuntimeParams.testSuiteArgs(reportPath));
-                ps.setString(12, KpiRuntimeParams.userId());
-                ps.setString(13, finalStatus);
-                ps.setInt(14, passed);
-                ps.setInt(15, failed);
-                ps.setInt(16, skipped);
-                ps.setInt(17, percentage);
-                ps.setString(18, "RUN-" + System.currentTimeMillis());
-                ps.setString(19, "NA".equalsIgnoreCase(KpiRuntimeParams.buildUrl()) ? reportPath : KpiRuntimeParams.buildUrl());
-                ps.setTimestamp(20, new Timestamp(suiteStartTime));
-                ps.setTimestamp(21, new Timestamp(suiteEndTime));
-
-                ps.executeUpdate();
-            }
-
-            System.out.println("KPI summary inserted into ta_reporting.ta_model");
-        } catch (Exception e) {
-            System.out.println("Failed to insert KPI summary into MySQL: " + e.getMessage());
+    private static String getProject() {
+        String project = System.getProperty("project");
+        if (project != null && !project.trim().isBlank()) {
+            return project.trim();
         }
+        return FrameworkConfig.getProperty("project", "").trim();
+    }
+
+    public static List<TestCase> parse(String filePath) {
+        try {
+            Path path = resolveTestcasePath(filePath);
+
+            if (!Files.exists(path)) {
+                throw new RuntimeException("Test case file not found: " + filePath);
+            }
+
+            System.out.println("Parsing testcase from: " + path.toAbsolutePath());
+
+            TestCase testCase = MAPPER.readValue(path.toFile(), TestCase.class);
+
+            List<TestCase> list = new ArrayList<>();
+            list.add(testCase);
+            return list;
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load test case: " + filePath, e);
+        }
+    }
+
+    public static List<TestCase> loadAll() {
+        try {
+            List<TestCase> cases = new ArrayList<>();
+
+            Path dir = resolveTestcaseDirectory();
+            if (dir == null) {
+                System.out.println("No testcase directory found.");
+                return cases;
+            }
+
+            System.out.println("Loading testcases from: " + dir.toAbsolutePath());
+
+            try (Stream<Path> stream = Files.list(dir)) {
+                List<Path> files = stream
+                        .filter(Files::isRegularFile)
+                        .filter(p -> p.toString().toLowerCase().endsWith(".json"))
+                        .sorted(Comparator.comparing(Path::toString))
+                        .toList();
+
+                for (Path file : files) {
+                    try {
+                        System.out.println("Reading testcase file: " + file.getFileName());
+                        TestCase testCase = MAPPER.readValue(file.toFile(), TestCase.class);
+                        cases.add(testCase);
+                    } catch (Exception e) {
+                        System.out.println("Skipping invalid testcase file: "
+                                + file.getFileName() + " -> " + e.getMessage());
+                    }
+                }
+            }
+
+            System.out.println("Loaded test cases count: " + cases.size());
+            return cases;
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load test cases", e);
+        }
+    }
+
+    private static Path resolveTestcasePath(String filePath) {
+        String project = getProject();
+
+        List<Path> candidates = new ArrayList<>();
+        candidates.add(Paths.get(filePath));
+        candidates.add(Paths.get("src", "test", "resources").resolve(filePath).normalize());
+
+        if (!project.isEmpty()) {
+            candidates.add(Paths.get(project, "src", "test", "resources").resolve(filePath).normalize());
+        }
+
+        for (Path candidate : candidates) {
+            if (Files.exists(candidate)) {
+                return candidate;
+            }
+        }
+
+        return candidates.get(candidates.size() - 1);
+    }
+
+    private static Path resolveTestcaseDirectory() {
+        String project = getProject();
+
+        List<Path> candidateDirs = new ArrayList<>();
+        candidateDirs.add(Paths.get("src", "test", "resources", "testcases"));
+
+        if (!project.isEmpty()) {
+            candidateDirs.add(Paths.get(project, "src", "test", "resources", "testcases"));
+        }
+
+        for (Path candidate : candidateDirs) {
+            if (Files.exists(candidate)) {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 }
