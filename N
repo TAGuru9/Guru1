@@ -1,68 +1,79 @@
-package com.acfc.automation.payload;
+package com.acfc.automation.context;
 
-import com.acfc.automation.util.FileUtil;
-import com.acfc.automation.util.PlaceholderResolver;
+import com.acfc.automation.config.FrameworkConfig;
+import com.acfc.automation.util.JacksonUtil;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
-public class PayloadBuilder {
+public class SharedContextManager {
 
-    private PayloadBuilder() {
+    private static final Map<String, Object> CACHE = new LinkedHashMap<>();
+    private static boolean loaded = false;
+
+    private SharedContextManager() {
     }
 
-    public static String build(String inlineBody,
-                               String bodyFile,
-                               String requestTemplate,
-                               Map<String, Object> context,
-                               String testId) {
+    private static synchronized void loadIfNeeded() {
+        if (loaded) {
+            return;
+        }
+
         try {
-            String content = null;
+            Path file = FrameworkConfig.sharedContextFile();
 
-            if (inlineBody != null && !inlineBody.isBlank()) {
-                content = inlineBody;
-
-            } else if (bodyFile != null && !bodyFile.isBlank()) {
-                Path bodyPath = Paths.get(bodyFile);
-
-                if (!Files.exists(bodyPath)) {
-                    bodyPath = Paths.get("src", "test", "resources")
-                            .resolve(bodyFile)
-                            .normalize();
-                }
-
-                content = FileUtil.read(bodyPath);
-
-            } else if (requestTemplate != null && !requestTemplate.isBlank()) {
-                Path templatePath = Paths.get(requestTemplate);
-
-                if (!Files.exists(templatePath)) {
-                    templatePath = Paths.get("src", "test", "resources")
-                            .resolve(requestTemplate)
-                            .normalize();
-                }
-
-                content = FileUtil.read(templatePath);
+            if (Files.exists(file)) {
+                Map<String, Object> map = JacksonUtil.mapper()
+                        .readValue(file.toFile(), LinkedHashMap.class);
+                CACHE.putAll(map);
             }
 
-            if (content == null) {
-                return null;
-            }
-
-            String resolved = PlaceholderResolver.resolve(content, context);
-
-            Path outDir = Paths.get("build", "generated-payloads");
-            Files.createDirectories(outDir);
-
-            Path out = outDir.resolve(testId + "-request.json");
-            FileUtil.write(out, resolved);
-
-            return resolved;
+            loaded = true;
 
         } catch (Exception e) {
-            throw new RuntimeException("Failed to build payload for test: " + testId, e);
+            throw new RuntimeException("Failed to load shared context", e);
         }
+    }
+
+    private static synchronized void persist() {
+        try {
+            Path file = FrameworkConfig.sharedContextFile();
+            if (file.getParent() != null) {
+                Files.createDirectories(file.getParent());
+            }
+            JacksonUtil.mapper().writerWithDefaultPrettyPrinter().writeValue(file.toFile(), CACHE);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to persist shared context", e);
+        }
+    }
+
+    public static synchronized void put(String key, Object value) {
+        loadIfNeeded();
+        CACHE.put(key, value);
+        persist();
+    }
+
+    public static synchronized Object get(String key) {
+        loadIfNeeded();
+        return CACHE.get(key);
+    }
+
+    public static synchronized String getAsString(String key) {
+        loadIfNeeded();
+        Object value = CACHE.get(key);
+        return value == null ? null : String.valueOf(value);
+    }
+
+    public static synchronized Map<String, Object> snapshot() {
+        loadIfNeeded();
+        return new LinkedHashMap<>(CACHE);
+    }
+
+    public static synchronized void clear() {
+        CACHE.clear();
+        loaded = true;
+        persist();
     }
 }
