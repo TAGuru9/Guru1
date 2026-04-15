@@ -1,79 +1,92 @@
-package com.acfc.automation.context;
+package com.acfc.automation.report;
 
-import com.acfc.automation.config.FrameworkConfig;
-import com.acfc.automation.util.JacksonUtil;
+import com.acfc.automation.model.ExecutionResult;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.LinkedHashMap;
-import java.util.Map;
+public class SummaryTracker {
 
-public class SharedContextManager {
+    private static int total = 0;
+    private static int passed = 0;
+    private static int failed = 0;
+    private static int skipped = 0;
+    private static long suiteStartTime = 0;
 
-    private static final Map<String, Object> CACHE = new LinkedHashMap<>();
-    private static boolean loaded = false;
-
-    private SharedContextManager() {
+    private SummaryTracker() {
     }
 
-    private static synchronized void loadIfNeeded() {
-        if (loaded) {
+    public static synchronized void startSuite(String name) {
+        total = 0;
+        passed = 0;
+        failed = 0;
+        skipped = 0;
+        suiteStartTime = System.currentTimeMillis();
+
+        System.out.println("===== TEST SUITE STARTED: " + name + " =====");
+    }
+
+    public static synchronized void addResult(ExecutionResult result) {
+        total++;
+
+        if (result == null || result.getStatus() == null) {
+            failed++;
             return;
         }
 
-        try {
-            Path file = FrameworkConfig.sharedContextFile();
+        String status = result.getStatus().trim().toUpperCase();
 
-            if (Files.exists(file)) {
-                Map<String, Object> map = JacksonUtil.mapper()
-                        .readValue(file.toFile(), LinkedHashMap.class);
-                CACHE.putAll(map);
-            }
-
-            loaded = true;
-
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to load shared context", e);
+        switch (status) {
+            case "PASS":
+                passed++;
+                break;
+            case "FAIL":
+                failed++;
+                break;
+            case "SKIP":
+            case "SKIPPED":
+                skipped++;
+                break;
+            default:
+                failed++;
         }
     }
 
-    private static synchronized void persist() {
-        try {
-            Path file = FrameworkConfig.sharedContextFile();
-            if (file.getParent() != null) {
-                Files.createDirectories(file.getParent());
-            }
-            JacksonUtil.mapper().writerWithDefaultPrettyPrinter().writeValue(file.toFile(), CACHE);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to persist shared context", e);
+    public static synchronized int getTotalCount() {
+        return total;
+    }
+
+    public static synchronized int getPassedCount() {
+        return passed;
+    }
+
+    public static synchronized int getFailedCount() {
+        return failed;
+    }
+
+    public static synchronized int getSkippedCount() {
+        return skipped;
+    }
+
+    public static synchronized long getDurationMs() {
+        if (suiteStartTime == 0) {
+            return 0;
         }
+        return System.currentTimeMillis() - suiteStartTime;
     }
 
-    public static synchronized void put(String key, Object value) {
-        loadIfNeeded();
-        CACHE.put(key, value);
-        persist();
+    public static synchronized long getSuiteStartTime() {
+        return suiteStartTime;
     }
 
-    public static synchronized Object get(String key) {
-        loadIfNeeded();
-        return CACHE.get(key);
+    public static synchronized long getSuiteEndTime() {
+        return suiteStartTime == 0 ? 0 : System.currentTimeMillis();
     }
 
-    public static synchronized String getAsString(String key) {
-        loadIfNeeded();
-        Object value = CACHE.get(key);
-        return value == null ? null : String.valueOf(value);
-    }
-
-    public static synchronized Map<String, Object> snapshot() {
-        loadIfNeeded();
-        return new LinkedHashMap<>(CACHE);
-    }
-
-    public static synchronized void clear() {
-        CACHE.clear();
-        loaded = true;
-        persist();
+    public static synchronized void printSummary() {
+        System.out.println("=====================================");
+        System.out.println("TOTAL   : " + total);
+        System.out.println("PASSED  : " + passed);
+        System.out.println("FAILED  : " + failed);
+        System.out.println("SKIPPED : " + skipped);
+        System.out.println("TIME(ms): " + getDurationMs());
+        System.out.println("=====================================");
     }
 }
