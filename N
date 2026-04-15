@@ -1,48 +1,105 @@
 package com.acfc.automation.report.kpi;
 
-import java.util.LinkedHashMap;
+import com.acfc.automation.config.FrameworkConfig;
+
 import java.util.Map;
 
-public class KpiArgsParser {
+public class KpiRuntimeParams {
 
-    private KpiArgsParser() {
+    private static Map<String, String> parsedArgs;
+
+    private KpiRuntimeParams() {
     }
 
-    public static Map<String, String> parse(String raw) {
-        Map<String, String> map = new LinkedHashMap<>();
-
-        if (raw == null || raw.trim().isBlank()) {
-            return map;
+    private static Map<String, String> args() {
+        if (parsedArgs == null) {
+            parsedArgs = KpiArgsParser.parse(
+                    FrameworkConfig.getProperty("kpiArgs", "")
+            );
         }
-
-        String[] pairs = raw.split(";");
-        for (String pair : pairs) {
-            if (pair == null || pair.trim().isBlank()) {
-                continue;
-            }
-
-            int idx = pair.indexOf('=');
-            if (idx <= 0) {
-                continue;
-            }
-
-            String key = pair.substring(0, idx).trim();
-            String value = pair.substring(idx + 1).trim();
-
-            if (!key.isBlank()) {
-                map.put(key, value);
-            }
-        }
-
-        return map;
+        return parsedArgs;
     }
 
-    public static String get(Map<String, String> map, String key, String defaultValue) {
-        if (map == null) {
-            return defaultValue;
+    public static String framework() {
+        return KpiArgsParser.get(args(), "framework", "PepperAPI");
+    }
+
+    public static String site() {
+        return KpiArgsParser.get(args(), "site", "automation");
+    }
+
+    public static String changeId() {
+        return KpiArgsParser.get(args(), "changeId", "NA");
+    }
+
+    public static String product() {
+        return KpiArgsParser.get(args(), "product", "NA");
+    }
+
+    public static String application() {
+        return KpiArgsParser.get(args(), "application", FrameworkConfig.projectName());
+    }
+
+    public static String envType() {
+        return KpiArgsParser.get(args(), "env", FrameworkConfig.env());
+    }
+
+    public static String release() {
+        return KpiArgsParser.get(args(), "release", "NA");
+    }
+
+    public static String testSuiteType() {
+        return KpiArgsParser.get(args(), "testSuiteType",
+                FrameworkConfig.getProperty("type", "NA"));
+    }
+
+    public static String repository() {
+        return KpiArgsParser.get(args(), "repository", "NA");
+    }
+
+    public static String gitBranch() {
+        return KpiArgsParser.get(args(), "gitBranch", "NA");
+    }
+
+    public static String userId() {
+        return KpiArgsParser.get(args(), "userId",
+                System.getProperty("user.name", "NA"));
+    }
+
+    public static String buildUrl() {
+        return KpiArgsParser.get(args(), "buildUrl", "NA");
+    }
+
+    public static String testSuiteArgs(String reportPath) {
+        String userId = KpiArgsParser.get(args(), "userId",
+                System.getProperty("user.name", "NA"));
+
+        String password = KpiArgsParser.get(args(), "password", "NA");
+        if (!"NA".equalsIgnoreCase(password)) {
+            password = "******";
         }
 
-        String value = map.get(key);
-        return (value == null || value.trim().isBlank()) ? defaultValue : value.trim();
+        String reportFile = extractReportName(reportPath);
+
+        return "userId=" + safe(userId)
+                + ",password=" + safe(password)
+                + ",report=" + safe(reportFile);
+    }
+
+    private static String extractReportName(String path) {
+        if (path == null || path.isBlank()) {
+            return "NA";
+        }
+
+        int idx = path.lastIndexOf('/');
+        if (idx == -1) {
+            idx = path.lastIndexOf('\\');
+        }
+
+        return idx != -1 ? path.substring(idx + 1) : path;
+    }
+
+    private static String safe(String value) {
+        return value == null || value.isBlank() ? "NA" : value.trim();
     }
 }
