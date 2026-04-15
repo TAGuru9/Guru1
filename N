@@ -1,115 +1,138 @@
-package com.acfc.automation.util;
+package com.acfc.automation.data;
 
-import java.io.BufferedReader;
+import com.acfc.automation.config.FrameworkConfig;
+import com.acfc.automation.model.TestCase;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
+import java.util.stream.Stream;
 
-public class TestDataReader {
+public final class TestCaseLoader {
 
-    private TestDataReader() {
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+    private TestCaseLoader() {
     }
 
-    public static Path resolve(String filePath) {
-        if (filePath == null || filePath.isBlank()) {
-            throw new IllegalArgumentException("File path is blank");
+    private static String getProject() {
+        String project = System.getProperty("project");
+        if (project != null && !project.trim().isBlank()) {
+            return project.trim();
         }
-
-        Path directPath = Paths.get(filePath);
-        if (Files.exists(directPath)) {
-            return directPath.toAbsolutePath().normalize();
-        }
-
-        Path resourcePath = Paths.get("src", "test", "resources")
-                .resolve(filePath)
-                .normalize();
-
-        if (Files.exists(resourcePath)) {
-            return resourcePath.toAbsolutePath().normalize();
-        }
-
-        throw new RuntimeException(
-                "Test data file not found. Checked: " + directPath + " and " + resourcePath
-        );
+        return FrameworkConfig.getProperty("project", "").trim();
     }
 
-    public static String getFileType(String filePath) {
-        int idx = filePath.lastIndexOf('.');
-        if (idx <= 0 || idx == filePath.length() - 1) {
-            throw new IllegalArgumentException("Invalid file path: " + filePath);
-        }
-        return filePath.substring(idx + 1).toLowerCase();
-    }
+    public static List<TestCase> parse(String filePath) {
+        try {
+            Path path = resolveTestcasePath(filePath).toAbsolutePath().normalize();
 
-    public static List<Map<String, String>> readData(String filePath, String delimiter) {
-        Path path = resolve(filePath);
-        String fileType = getFileType(path.toString());
-
-        switch (fileType) {
-            case "csv":
-                return readDelimitedFile(path, normalizeDelimiter(delimiter));
-            case "txt":
-                return readDelimitedFile(path, normalizeDelimiter(delimiter));
-            default:
-                throw new RuntimeException("Unsupported test data file type: " + fileType);
-        }
-    }
-
-    private static List<Map<String, String>> readDelimitedFile(Path path, String delimiter) {
-        try (BufferedReader reader = Files.newBufferedReader(path)) {
-            List<Map<String, String>> records = new ArrayList<>();
-
-            String headerLine = reader.readLine();
-            if (headerLine == null || headerLine.isBlank()) {
-                return records;
+            if (!Files.exists(path)) {
+                throw new RuntimeException("Test case file not found: " + filePath);
             }
 
-            String[] headers = split(headerLine, delimiter);
+            System.out.println("Parsing testcase from: " + path);
 
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.trim().isEmpty()) {
-                    continue;
-                }
+            TestCase testCase = MAPPER.readValue(path.toFile(), TestCase.class);
 
-                String[] values = split(line, delimiter);
-                Map<String, String> row = new LinkedHashMap<>();
-
-                for (int i = 0; i < headers.length; i++) {
-                    String key = headers[i] == null ? "" : headers[i].trim();
-                    String value = i < values.length ? values[i].trim() : "";
-                    row.put(key, value);
-                }
-
-                records.add(row);
-            }
-
-            return records;
+            List<TestCase> list = new ArrayList<>();
+            list.add(testCase);
+            return list;
 
         } catch (Exception e) {
-            throw new RuntimeException("Failed to read test data from: " + path, e);
+            throw new RuntimeException("Failed to load test case: " + filePath, e);
         }
     }
 
-    private static String[] split(String line, String delimiter) {
-        return line.split(java.util.regex.Pattern.quote(delimiter), -1);
+    public static List<TestCase> loadAll() {
+        try {
+            List<TestCase> cases = new ArrayList<>();
+
+            Path dir = resolveTestcaseDirectory();
+            if (dir == null) {
+                System.out.println("No testcase directory found.");
+                return cases;
+            }
+
+            dir = dir.toAbsolutePath().normalize();
+            System.out.println("Loading testcases from: " + dir);
+
+            try (Stream<Path> stream = Files.list(dir)) {
+                List<Path> files = stream
+                        .filter(Files::isRegularFile)
+                        .filter(p -> p.toString().toLowerCase().endsWith(".json"))
+                        .sorted(Comparator.comparing(Path::toString))
+                        .toList();
+
+                for (Path file : files) {
+                    try {
+                        Path absoluteFile = file.toAbsolutePath().normalize();
+
+                        System.out.println("Reading testcase file: " + file.getFileName());
+                        System.out.println("Absolute testcase path: " + absoluteFile);
+                        System.out.println("Exists? " + Files.exists(absoluteFile));
+
+                        TestCase testCase = MAPPER.readValue(absoluteFile.toFile(), TestCase.class);
+                        cases.add(testCase);
+
+                    } catch (Exception e) {
+                        System.out.println("Skipping invalid testcase file: "
+                                + file.getFileName() + " -> " + e.getMessage());
+                    }
+                }
+            }
+
+            System.out.println("Loaded test cases count: " + cases.size());
+            return cases;
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load test cases", e);
+        }
     }
 
-    private static String normalizeDelimiter(String delimiter) {
-        if (delimiter == null || delimiter.isBlank()) {
-            return ",";
+    private static Path resolveTestcasePath(String filePath) {
+        String project = getProject();
+
+        List<Path> candidates = new ArrayList<>();
+        candidates.add(Paths.get(filePath));
+        candidates.add(Paths.get("src", "test", "resources").resolve(filePath).normalize());
+
+        if (!project.isEmpty()) {
+            candidates.add(Paths.get(project, "src", "test", "resources").resolve(filePath).normalize());
         }
 
-        String trimmed = delimiter.trim();
-
-        if ("tab".equalsIgnoreCase(trimmed) || "\\t".equals(trimmed)) {
-            return "\t";
+        for (Path candidate : candidates) {
+            if (Files.exists(candidate.toAbsolutePath().normalize())) {
+                return candidate.toAbsolutePath().normalize();
+            }
         }
 
-        return trimmed;
+        return candidates.get(candidates.size() - 1).toAbsolutePath().normalize();
+    }
+
+    private static Path resolveTestcaseDirectory() {
+        String project = getProject();
+
+        List<Path> candidateDirs = new ArrayList<>();
+        candidateDirs.add(Paths.get("src", "test", "resources", "testcases"));
+
+        if (!project.isEmpty()) {
+            candidateDirs.add(Paths.get(project, "src", "test", "resources", "testcases"));
+        }
+
+        for (Path candidate : candidateDirs) {
+            Path absolute = candidate.toAbsolutePath().normalize();
+            if (Files.exists(absolute)) {
+                return absolute;
+            }
+        }
+
+        return null;
     }
 }
