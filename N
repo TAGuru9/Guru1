@@ -1,129 +1,48 @@
-package com.acfc.automation.report;
+package com.acfc.automation.report.kpi;
 
-import com.acfc.automation.model.ExecutionResult;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
-import java.io.FileOutputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.List;
+public class KpiArgsParser {
 
-public class ExcelReportWriter {
-
-    private ExcelReportWriter() {
+    private KpiArgsParser() {
     }
 
-    public static void write(List<ExecutionResult> results) {
-        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
-            writeSummarySheet(workbook, results);
-            writeDetailSheet(workbook, results);
+    public static Map<String, String> parse(String raw) {
+        Map<String, String> map = new LinkedHashMap<>();
 
-            Path out = Paths.get("build", "reports", "excel", "execution-report.xlsx");
-            Files.createDirectories(out.getParent());
+        if (raw == null || raw.trim().isBlank()) {
+            return map;
+        }
 
-            try (FileOutputStream fos = new FileOutputStream(out.toFile())) {
-                workbook.write(fos);
+        String[] pairs = raw.split(";");
+        for (String pair : pairs) {
+            if (pair == null || pair.trim().isBlank()) {
+                continue;
             }
 
-        } catch (Exception e) {
-            throw new RuntimeException("Unable to write Excel report", e);
-        }
-    }
+            int idx = pair.indexOf('=');
+            if (idx <= 0) {
+                continue;
+            }
 
-    private static void writeSummarySheet(XSSFWorkbook workbook, List<ExecutionResult> results) {
-        Sheet sheet = workbook.createSheet("Summary");
+            String key = pair.substring(0, idx).trim();
+            String value = pair.substring(idx + 1).trim();
 
-        int total = results == null ? 0 : results.size();
-        int passed = 0;
-        int failed = 0;
-        int skipped = 0;
-
-        if (results != null) {
-            for (ExecutionResult result : results) {
-                String status = result == null || result.getStatus() == null
-                        ? ""
-                        : result.getStatus().trim().toUpperCase();
-
-                switch (status) {
-                    case "PASS":
-                        passed++;
-                        break;
-                    case "FAIL":
-                        failed++;
-                        break;
-                    case "SKIP":
-                    case "SKIPPED":
-                        skipped++;
-                        break;
-                    default:
-                        break;
-                }
+            if (!key.isBlank()) {
+                map.put(key, value);
             }
         }
 
-        int rowNum = 0;
-
-        Row header = sheet.createRow(rowNum++);
-        header.createCell(0).setCellValue("Metric");
-        header.createCell(1).setCellValue("Value");
-
-        Row totalRow = sheet.createRow(rowNum++);
-        totalRow.createCell(0).setCellValue("Total");
-        totalRow.createCell(1).setCellValue(total);
-
-        Row passRow = sheet.createRow(rowNum++);
-        passRow.createCell(0).setCellValue("Passed");
-        passRow.createCell(1).setCellValue(passed);
-
-        Row failRow = sheet.createRow(rowNum++);
-        failRow.createCell(0).setCellValue("Failed");
-        failRow.createCell(1).setCellValue(failed);
-
-        Row skipRow = sheet.createRow(rowNum++);
-        skipRow.createCell(0).setCellValue("Skipped");
-        skipRow.createCell(1).setCellValue(skipped);
-
-        sheet.autoSizeColumn(0);
-        sheet.autoSizeColumn(1);
+        return map;
     }
 
-    private static void writeDetailSheet(XSSFWorkbook workbook, List<ExecutionResult> results) {
-        Sheet sheet = workbook.createSheet("Details");
-
-        int rowNum = 0;
-
-        Row header = sheet.createRow(rowNum++);
-        header.createCell(0).setCellValue("Project");
-        header.createCell(1).setCellValue("Test ID");
-        header.createCell(2).setCellValue("Test Name");
-        header.createCell(3).setCellValue("Method");
-        header.createCell(4).setCellValue("Status");
-        header.createCell(5).setCellValue("Duration(ms)");
-        header.createCell(6).setCellValue("Message");
-
-        if (results != null) {
-            for (ExecutionResult result : results) {
-                Row row = sheet.createRow(rowNum++);
-
-                row.createCell(0).setCellValue(safe(result == null ? null : result.getProject()));
-                row.createCell(1).setCellValue(safe(result == null ? null : result.getTestId()));
-                row.createCell(2).setCellValue(safe(result == null ? null : result.getTestName()));
-                row.createCell(3).setCellValue(safe(result == null ? null : result.getMethod()));
-                row.createCell(4).setCellValue(safe(result == null ? null : result.getStatus()));
-                row.createCell(5).setCellValue(result == null ? 0 : result.getDurationMs());
-                row.createCell(6).setCellValue(safe(result == null ? null : result.getMessage()));
-            }
+    public static String get(Map<String, String> map, String key, String defaultValue) {
+        if (map == null) {
+            return defaultValue;
         }
 
-        for (int i = 0; i <= 6; i++) {
-            sheet.autoSizeColumn(i);
-        }
-    }
-
-    private static String safe(String value) {
-        return value == null ? "" : value;
+        String value = map.get(key);
+        return (value == null || value.trim().isBlank()) ? defaultValue : value.trim();
     }
 }
