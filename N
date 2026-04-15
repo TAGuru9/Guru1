@@ -25,20 +25,34 @@ public class PayloadBuilder {
     }
 
     private static Path resolveResourcePath(String filePath) {
+        if (filePath == null || filePath.isBlank()) {
+            throw new IllegalArgumentException("Resource path is blank");
+        }
+
+        String trimmed = filePath.trim();
         String project = getProject();
+
         List<Path> candidates = new ArrayList<>();
 
-        candidates.add(Paths.get(filePath));
-        candidates.add(Paths.get("src", "test", "resources").resolve(filePath).normalize());
+        // 1. Use exactly what was passed
+        candidates.add(Paths.get(trimmed));
 
-        if (!project.isEmpty()) {
-            candidates.add(Paths.get(project, "src", "test", "resources")
-                    .resolve(filePath)
-                    .normalize());
+        // 2. Current module resources
+        candidates.add(Paths.get("src", "test", "resources").resolve(trimmed).normalize());
+
+        // 3. Selected project resources, only if not already project-prefixed
+        if (!project.isEmpty() && !trimmed.startsWith(project + "/") && !trimmed.startsWith(project + "\\")) {
+            candidates.add(Paths.get(project, "src", "test", "resources").resolve(trimmed).normalize());
+        }
+
+        // 4. If caller already passed project-prefixed path, keep it as-is
+        if (!project.isEmpty() && (trimmed.startsWith(project + "/") || trimmed.startsWith(project + "\\"))) {
+            candidates.add(Paths.get(trimmed).normalize());
         }
 
         for (Path candidate : candidates) {
             Path absolute = candidate.toAbsolutePath().normalize();
+            System.out.println("Checking payload/template path: " + absolute);
             if (Files.exists(absolute)) {
                 return absolute;
             }
@@ -76,7 +90,8 @@ public class PayloadBuilder {
             Path outDir = Paths.get("build", "generated-payloads");
             Files.createDirectories(outDir);
 
-            Path out = outDir.resolve(testId + "-request.xml");
+            String extension = requestTemplate != null && requestTemplate.toLowerCase().endsWith(".xml") ? ".xml" : ".json";
+            Path out = outDir.resolve(testId + "-request" + extension);
             FileUtil.write(out, resolved);
 
             return resolved;
