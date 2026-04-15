@@ -1,92 +1,129 @@
 package com.acfc.automation.report;
 
 import com.acfc.automation.model.ExecutionResult;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
-public class SummaryTracker {
+import java.io.FileOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
 
-    private static int total = 0;
-    private static int passed = 0;
-    private static int failed = 0;
-    private static int skipped = 0;
-    private static long suiteStartTime = 0;
+public class ExcelReportWriter {
 
-    private SummaryTracker() {
+    private ExcelReportWriter() {
     }
 
-    public static synchronized void startSuite(String name) {
-        total = 0;
-        passed = 0;
-        failed = 0;
-        skipped = 0;
-        suiteStartTime = System.currentTimeMillis();
+    public static void write(List<ExecutionResult> results) {
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            writeSummarySheet(workbook, results);
+            writeDetailSheet(workbook, results);
 
-        System.out.println("===== TEST SUITE STARTED: " + name + " =====");
-    }
+            Path out = Paths.get("build", "reports", "excel", "execution-report.xlsx");
+            Files.createDirectories(out.getParent());
 
-    public static synchronized void addResult(ExecutionResult result) {
-        total++;
+            try (FileOutputStream fos = new FileOutputStream(out.toFile())) {
+                workbook.write(fos);
+            }
 
-        if (result == null || result.getStatus() == null) {
-            failed++;
-            return;
-        }
-
-        String status = result.getStatus().trim().toUpperCase();
-
-        switch (status) {
-            case "PASS":
-                passed++;
-                break;
-            case "FAIL":
-                failed++;
-                break;
-            case "SKIP":
-            case "SKIPPED":
-                skipped++;
-                break;
-            default:
-                failed++;
+        } catch (Exception e) {
+            throw new RuntimeException("Unable to write Excel report", e);
         }
     }
 
-    public static synchronized int getTotalCount() {
-        return total;
-    }
+    private static void writeSummarySheet(XSSFWorkbook workbook, List<ExecutionResult> results) {
+        Sheet sheet = workbook.createSheet("Summary");
 
-    public static synchronized int getPassedCount() {
-        return passed;
-    }
+        int total = results == null ? 0 : results.size();
+        int passed = 0;
+        int failed = 0;
+        int skipped = 0;
 
-    public static synchronized int getFailedCount() {
-        return failed;
-    }
+        if (results != null) {
+            for (ExecutionResult result : results) {
+                String status = result == null || result.getStatus() == null
+                        ? ""
+                        : result.getStatus().trim().toUpperCase();
 
-    public static synchronized int getSkippedCount() {
-        return skipped;
-    }
-
-    public static synchronized long getDurationMs() {
-        if (suiteStartTime == 0) {
-            return 0;
+                switch (status) {
+                    case "PASS":
+                        passed++;
+                        break;
+                    case "FAIL":
+                        failed++;
+                        break;
+                    case "SKIP":
+                    case "SKIPPED":
+                        skipped++;
+                        break;
+                    default:
+                        break;
+                }
+            }
         }
-        return System.currentTimeMillis() - suiteStartTime;
+
+        int rowNum = 0;
+
+        Row header = sheet.createRow(rowNum++);
+        header.createCell(0).setCellValue("Metric");
+        header.createCell(1).setCellValue("Value");
+
+        Row totalRow = sheet.createRow(rowNum++);
+        totalRow.createCell(0).setCellValue("Total");
+        totalRow.createCell(1).setCellValue(total);
+
+        Row passRow = sheet.createRow(rowNum++);
+        passRow.createCell(0).setCellValue("Passed");
+        passRow.createCell(1).setCellValue(passed);
+
+        Row failRow = sheet.createRow(rowNum++);
+        failRow.createCell(0).setCellValue("Failed");
+        failRow.createCell(1).setCellValue(failed);
+
+        Row skipRow = sheet.createRow(rowNum++);
+        skipRow.createCell(0).setCellValue("Skipped");
+        skipRow.createCell(1).setCellValue(skipped);
+
+        sheet.autoSizeColumn(0);
+        sheet.autoSizeColumn(1);
     }
 
-    public static synchronized long getSuiteStartTime() {
-        return suiteStartTime;
+    private static void writeDetailSheet(XSSFWorkbook workbook, List<ExecutionResult> results) {
+        Sheet sheet = workbook.createSheet("Details");
+
+        int rowNum = 0;
+
+        Row header = sheet.createRow(rowNum++);
+        header.createCell(0).setCellValue("Project");
+        header.createCell(1).setCellValue("Test ID");
+        header.createCell(2).setCellValue("Test Name");
+        header.createCell(3).setCellValue("Method");
+        header.createCell(4).setCellValue("Status");
+        header.createCell(5).setCellValue("Duration(ms)");
+        header.createCell(6).setCellValue("Message");
+
+        if (results != null) {
+            for (ExecutionResult result : results) {
+                Row row = sheet.createRow(rowNum++);
+
+                row.createCell(0).setCellValue(safe(result == null ? null : result.getProject()));
+                row.createCell(1).setCellValue(safe(result == null ? null : result.getTestId()));
+                row.createCell(2).setCellValue(safe(result == null ? null : result.getTestName()));
+                row.createCell(3).setCellValue(safe(result == null ? null : result.getMethod()));
+                row.createCell(4).setCellValue(safe(result == null ? null : result.getStatus()));
+                row.createCell(5).setCellValue(result == null ? 0 : result.getDurationMs());
+                row.createCell(6).setCellValue(safe(result == null ? null : result.getMessage()));
+            }
+        }
+
+        for (int i = 0; i <= 6; i++) {
+            sheet.autoSizeColumn(i);
+        }
     }
 
-    public static synchronized long getSuiteEndTime() {
-        return suiteStartTime == 0 ? 0 : System.currentTimeMillis();
-    }
-
-    public static synchronized void printSummary() {
-        System.out.println("=====================================");
-        System.out.println("TOTAL   : " + total);
-        System.out.println("PASSED  : " + passed);
-        System.out.println("FAILED  : " + failed);
-        System.out.println("SKIPPED : " + skipped);
-        System.out.println("TIME(ms): " + getDurationMs());
-        System.out.println("=====================================");
+    private static String safe(String value) {
+        return value == null ? "" : value;
     }
 }
