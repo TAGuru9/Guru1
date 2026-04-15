@@ -1,19 +1,19 @@
-package com.acfc.automation.util;
+package com.acfc.automation.payload;
 
 import com.acfc.automation.config.FrameworkConfig;
+import com.acfc.automation.util.FileUtil;
+import com.acfc.automation.util.PlaceholderResolver;
 
-import java.io.BufferedReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-public class TestDataReader {
+public class PayloadBuilder {
 
-    private TestDataReader() {
+    private PayloadBuilder() {
     }
 
     private static String getProject() {
@@ -24,23 +24,13 @@ public class TestDataReader {
         return FrameworkConfig.getProperty("project", "").trim();
     }
 
-    public static Path resolve(String filePath) {
-        if (filePath == null || filePath.isBlank()) {
-            throw new IllegalArgumentException("File path is blank");
-        }
-
+    private static Path resolveResourcePath(String filePath) {
         String project = getProject();
         List<Path> candidates = new ArrayList<>();
 
-        // 1. direct path
         candidates.add(Paths.get(filePath));
+        candidates.add(Paths.get("src", "test", "resources").resolve(filePath).normalize());
 
-        // 2. current module resources
-        candidates.add(Paths.get("src", "test", "resources")
-                .resolve(filePath)
-                .normalize());
-
-        // 3. selected project resources
         if (!project.isEmpty()) {
             candidates.add(Paths.get(project, "src", "test", "resources")
                     .resolve(filePath)
@@ -54,84 +44,45 @@ public class TestDataReader {
             }
         }
 
-        throw new RuntimeException(
-                "Test data file not found. Checked: " + candidates
-        );
+        throw new RuntimeException("File not found. Checked direct/relative/resources paths for: " + filePath);
     }
 
-    public static String getFileType(String filePath) {
-        int idx = filePath.lastIndexOf('.');
-        if (idx <= 0 || idx == filePath.length() - 1) {
-            throw new IllegalArgumentException("Invalid file path: " + filePath);
-        }
-        return filePath.substring(idx + 1).toLowerCase();
-    }
+    public static String build(String inlineBody,
+                               String bodyFile,
+                               String requestTemplate,
+                               Map<String, Object> context,
+                               String testId) {
+        try {
+            String content = null;
 
-    public static List<Map<String, String>> readData(String filePath, String delimiter) {
-        Path path = resolve(filePath);
-        String fileType = getFileType(path.toString());
+            if (inlineBody != null && !inlineBody.isBlank()) {
+                content = inlineBody;
 
-        switch (fileType) {
-            case "csv":
-                return readDelimitedFile(path, normalizeDelimiter(delimiter));
-            case "txt":
-                return readDelimitedFile(path, normalizeDelimiter(delimiter));
-            default:
-                throw new RuntimeException("Unsupported test data file type: " + fileType);
-        }
-    }
+            } else if (bodyFile != null && !bodyFile.isBlank()) {
+                Path bodyPath = resolveResourcePath(bodyFile);
+                content = FileUtil.read(bodyPath);
 
-    private static List<Map<String, String>> readDelimitedFile(Path path, String delimiter) {
-        try (BufferedReader reader = Files.newBufferedReader(path)) {
-            List<Map<String, String>> records = new ArrayList<>();
-
-            String headerLine = reader.readLine();
-            if (headerLine == null || headerLine.isBlank()) {
-                return records;
+            } else if (requestTemplate != null && !requestTemplate.isBlank()) {
+                Path templatePath = resolveResourcePath(requestTemplate);
+                content = FileUtil.read(templatePath);
             }
 
-            String[] headers = split(headerLine, delimiter);
-
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.trim().isEmpty()) {
-                    continue;
-                }
-
-                String[] values = split(line, delimiter);
-                Map<String, String> row = new LinkedHashMap<>();
-
-                for (int i = 0; i < headers.length; i++) {
-                    String key = headers[i] == null ? "" : headers[i].trim();
-                    String value = i < values.length ? values[i].trim() : "";
-                    row.put(key, value);
-                }
-
-                records.add(row);
+            if (content == null) {
+                return null;
             }
 
-            return records;
+            String resolved = PlaceholderResolver.resolve(content, context);
+
+            Path outDir = Paths.get("build", "generated-payloads");
+            Files.createDirectories(outDir);
+
+            Path out = outDir.resolve(testId + "-request.xml");
+            FileUtil.write(out, resolved);
+
+            return resolved;
 
         } catch (Exception e) {
-            throw new RuntimeException("Failed to read test data from: " + path, e);
+            throw new RuntimeException("Failed to build payload for test: " + testId, e);
         }
-    }
-
-    private static String[] split(String line, String delimiter) {
-        return line.split(java.util.regex.Pattern.quote(delimiter), -1);
-    }
-
-    private static String normalizeDelimiter(String delimiter) {
-        if (delimiter == null || delimiter.isBlank()) {
-            return ",";
-        }
-
-        String trimmed = delimiter.trim();
-
-        if ("tab".equalsIgnoreCase(trimmed) || "\\t".equals(trimmed)) {
-            return "\t";
-        }
-
-        return trimmed;
     }
 }
