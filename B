@@ -1,13 +1,129 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+# -----------------------------
+# Global variables
+# -----------------------------
+$RunAll    = "N"
+$RunModule = ""
+
+$BaseFolder       = "C:\Temp\FacetsAutomation"
+$RunTimeStamp     = Get-Date -Format "yyyyMMdd_HHmmss"
+$RunFolder        = Join-Path $BaseFolder $RunTimeStamp
+$ScreenshotFolder = Join-Path $RunFolder "Screenshots"
+$LogFile          = Join-Path $RunFolder "ExecutionLog.txt"
+
+# -----------------------------
+# Initialize folders
+# -----------------------------
+function Initialize-RunFolders {
+    if (-not (Test-Path $BaseFolder)) {
+        New-Item -ItemType Directory -Path $BaseFolder -Force | Out-Null
+    }
+
+    if (-not (Test-Path $RunFolder)) {
+        New-Item -ItemType Directory -Path $RunFolder -Force | Out-Null
+    }
+
+    if (-not (Test-Path $ScreenshotFolder)) {
+        New-Item -ItemType Directory -Path $ScreenshotFolder -Force | Out-Null
+    }
+}
+
+# -----------------------------
+# Sleep helper
+# -----------------------------
+function TA-Sleep {
+    param(
+        [int]$Seconds = 2
+    )
+    Start-Sleep -Seconds $Seconds
+}
+
+# -----------------------------
+# Logging
+# -----------------------------
+function Write-StepLog {
+    param(
+        [string]$Message
+    )
+
+    $timeStamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $line = "$timeStamp - $Message"
+
+    Add-Content -Path $LogFile -Value $line
+    Write-Host $line
+}
+
+# -----------------------------
+# Screenshot
+# -----------------------------
+function New-Screenshot {
+    param(
+        [string]$StepName = "Step"
+    )
+
+    try {
+        $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+        $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+        $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+
+        $graphics.CopyFromScreen(
+            $bounds.Location,
+            [System.Drawing.Point]::Empty,
+            $bounds.Size
+        )
+
+        $safeStepName = $StepName -replace '[\\/:*?"<>|]', '_'
+        $fileName = "{0}_{1}.png" -f (Get-Date -Format "yyyyMMdd_HHmmss_fff"), $safeStepName
+        $filePath = Join-Path $ScreenshotFolder $fileName
+
+        $bitmap.Save($filePath, [System.Drawing.Imaging.ImageFormat]::Png)
+
+        $graphics.Dispose()
+        $bitmap.Dispose()
+
+        Write-StepLog "Screenshot saved: $filePath"
+        return $filePath
+    }
+    catch {
+        Write-StepLog "Screenshot failed: $($_.Exception.Message)"
+    }
+}
+
+# -----------------------------
+# Common step wrapper
+# -----------------------------
+function Invoke-Step {
+    param(
+        [string]$StepName,
+        [scriptblock]$Action
+    )
+
+    try {
+        Write-StepLog "STARTED: $StepName"
+        & $Action
+        TA-Sleep -Seconds 1
+        New-Screenshot -StepName $StepName | Out-Null
+        Write-StepLog "PASSED: $StepName"
+    }
+    catch {
+        Write-StepLog "FAILED: $StepName - $($_.Exception.Message)"
+        New-Screenshot -StepName "${StepName}_FAILED" | Out-Null
+        throw
+    }
+}
+
+# -----------------------------
+# Popup UI
+# -----------------------------
 function Show-ModulePopup {
 
     $script:SelectedModule = $null
 
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "Facets Automation"
-    $form.Size = New-Object System.Drawing.Size(420,260)
+    $form.Size = New-Object System.Drawing.Size(420,300)
     $form.StartPosition = "CenterScreen"
     $form.FormBorderStyle = "FixedDialog"
     $form.MaximizeBox = $false
@@ -26,14 +142,14 @@ function Show-ModulePopup {
     $descLabel.Text = "Choose which Facets flow you want to run"
     $descLabel.Font = New-Object System.Drawing.Font("Segoe UI",9)
     $descLabel.AutoSize = $true
-    $descLabel.Location = New-Object System.Drawing.Point(95,55)
+    $descLabel.Location = New-Object System.Drawing.Point(90,55)
     $descLabel.ForeColor = [System.Drawing.Color]::DimGray
 
     $groupBox = New-Object System.Windows.Forms.GroupBox
     $groupBox.Text = "Available Options"
-    $groupBox.Size = New-Object System.Drawing.Size(360,110)
+    $groupBox.Size = New-Object System.Drawing.Size(360,120)
     $groupBox.Location = New-Object System.Drawing.Point(20,85)
-    $groupBox.Font = New-Object System.Drawing.Font("Segoe UI",9,[System.Drawing.FontStyle]::Regular)
+    $groupBox.Font = New-Object System.Drawing.Font("Segoe UI",9)
 
     function New-MenuButton {
         param(
@@ -48,8 +164,7 @@ function Show-ModulePopup {
         $btn.Text = $Text
         $btn.Size = New-Object System.Drawing.Size($W,$H)
         $btn.Location = New-Object System.Drawing.Point($X,$Y)
-        $btn.Font = New-Object System.Drawing.Font("Segoe UI",9,[System.Drawing.FontStyle]::Regular)
-        $btn.FlatStyle = "Standard"
+        $btn.Font = New-Object System.Drawing.Font("Segoe UI",9)
         $btn.UseVisualStyleBackColor = $true
         return $btn
     }
@@ -57,12 +172,12 @@ function Show-ModulePopup {
     $btnProvider = New-MenuButton -Text "Provider" -X 20  -Y 30
     $btnClaims   = New-MenuButton -Text "Claims"   -X 130 -Y 30
     $btnMember   = New-MenuButton -Text "Member"   -X 240 -Y 30
-    $btnAll      = New-MenuButton -Text "Run All"  -X 130 -Y 70
+    $btnAll      = New-MenuButton -Text "Run All"  -X 130 -Y 75
 
     $btnCancel = New-Object System.Windows.Forms.Button
     $btnCancel.Text = "Cancel"
     $btnCancel.Size = New-Object System.Drawing.Size(90,32)
-    $btnCancel.Location = New-Object System.Drawing.Point(155,205)
+    $btnCancel.Location = New-Object System.Drawing.Point(155,220)
     $btnCancel.Font = New-Object System.Drawing.Font("Segoe UI",9)
 
     $btnProvider.Add_Click({
@@ -106,3 +221,224 @@ function Show-ModulePopup {
     [void]$form.ShowDialog()
     return $script:SelectedModule
 }
+
+# -----------------------------
+# Facets reusable app functions
+# -----------------------------
+function Start-FacetsApp {
+    param(
+        [string]$ExePath = "C:\Program Files (x86)\TriZetto\Facets\System\Bin\carexe.exe"
+    )
+
+    if (-not (Test-Path $ExePath)) {
+        throw "Facets application not found: $ExePath"
+    }
+
+    Start-Process -FilePath $ExePath
+    TA-Sleep -Seconds 5
+}
+
+function Stop-FacetsApp {
+    $proc = Get-Process -Name "carexe" -ErrorAction SilentlyContinue
+    if ($proc) {
+        $proc | Stop-Process -Force
+        TA-Sleep -Seconds 2
+    }
+}
+
+function Wait-ForFacets {
+    param(
+        [int]$TimeoutSeconds = 30
+    )
+
+    $elapsed = 0
+    while ($elapsed -lt $TimeoutSeconds) {
+        $proc = Get-Process -Name "carexe" -ErrorAction SilentlyContinue
+        if ($proc) {
+            return $true
+        }
+        Start-Sleep -Seconds 1
+        $elapsed++
+    }
+
+    throw "Facets process did not start within $TimeoutSeconds seconds."
+}
+
+function Handle-FacetsError {
+    $wshell = New-Object -ComObject WScript.Shell
+    if ($wshell.AppActivate("Facets - Error")) {
+        New-Screenshot -StepName "Facets_Error" | Out-Null
+        TA-Sleep -Seconds 1
+        $wshell.SendKeys("{ENTER}")
+        throw "Facets error popup detected."
+    }
+}
+
+# -----------------------------
+# Module flows
+# Replace placeholders with real steps
+# -----------------------------
+function Run-ProviderFlow {
+    Write-StepLog "========== PROVIDER FLOW START =========="
+
+    Invoke-Step -StepName "Provider_Close_Old_App" -Action {
+        Stop-FacetsApp
+    }
+
+    Invoke-Step -StepName "Provider_Launch_App" -Action {
+        Start-FacetsApp
+    }
+
+    Invoke-Step -StepName "Provider_Wait_For_App" -Action {
+        Wait-ForFacets | Out-Null
+    }
+
+    Invoke-Step -StepName "Provider_Check_Error" -Action {
+        Handle-FacetsError
+    }
+
+    Invoke-Step -StepName "Provider_Business_Steps" -Action {
+        # TODO: Add Provider automation here
+        Write-Host "Run Provider business steps here"
+        TA-Sleep -Seconds 2
+    }
+
+    Invoke-Step -StepName "Provider_Final_Error_Check" -Action {
+        Handle-FacetsError
+    }
+
+    Write-StepLog "========== PROVIDER FLOW END =========="
+    [System.Windows.Forms.MessageBox]::Show("Provider flow completed.","Facets Automation")
+}
+
+function Run-ClaimsFlow {
+    Write-StepLog "========== CLAIMS FLOW START =========="
+
+    Invoke-Step -StepName "Claims_Close_Old_App" -Action {
+        Stop-FacetsApp
+    }
+
+    Invoke-Step -StepName "Claims_Launch_App" -Action {
+        Start-FacetsApp
+    }
+
+    Invoke-Step -StepName "Claims_Wait_For_App" -Action {
+        Wait-ForFacets | Out-Null
+    }
+
+    Invoke-Step -StepName "Claims_Check_Error" -Action {
+        Handle-FacetsError
+    }
+
+    Invoke-Step -StepName "Claims_Business_Steps" -Action {
+        # TODO: Add Claims automation here
+        Write-Host "Run Claims business steps here"
+        TA-Sleep -Seconds 2
+    }
+
+    Invoke-Step -StepName "Claims_Final_Error_Check" -Action {
+        Handle-FacetsError
+    }
+
+    Write-StepLog "========== CLAIMS FLOW END =========="
+    [System.Windows.Forms.MessageBox]::Show("Claims flow completed.","Facets Automation")
+}
+
+function Run-MemberFlow {
+    Write-StepLog "========== MEMBER FLOW START =========="
+
+    Invoke-Step -StepName "Member_Close_Old_App" -Action {
+        Stop-FacetsApp
+    }
+
+    Invoke-Step -StepName "Member_Launch_App" -Action {
+        Start-FacetsApp
+    }
+
+    Invoke-Step -StepName "Member_Wait_For_App" -Action {
+        Wait-ForFacets | Out-Null
+    }
+
+    Invoke-Step -StepName "Member_Check_Error" -Action {
+        Handle-FacetsError
+    }
+
+    Invoke-Step -StepName "Member_Business_Steps" -Action {
+        # TODO: Add Member automation here
+        Write-Host "Run Member business steps here"
+        TA-Sleep -Seconds 2
+    }
+
+    Invoke-Step -StepName "Member_Final_Error_Check" -Action {
+        Handle-FacetsError
+    }
+
+    Write-StepLog "========== MEMBER FLOW END =========="
+    [System.Windows.Forms.MessageBox]::Show("Member flow completed.","Facets Automation")
+}
+
+function Run-AllFlow {
+    Write-StepLog "========== RUN ALL START =========="
+
+    Run-ProviderFlow
+    Run-ClaimsFlow
+    Run-MemberFlow
+
+    Write-StepLog "========== RUN ALL END =========="
+    [System.Windows.Forms.MessageBox]::Show("All flows completed.","Facets Automation")
+}
+
+# -----------------------------
+# Dispatcher
+# -----------------------------
+function Start-SelectedFlow {
+    param(
+        [string]$SelectedModule
+    )
+
+    switch ($SelectedModule) {
+        "Provider" { Run-ProviderFlow }
+        "Claims"   { Run-ClaimsFlow }
+        "Member"   { Run-MemberFlow }
+        "All"      { Run-AllFlow }
+        default {
+            [System.Windows.Forms.MessageBox]::Show(
+                "No valid module selected.",
+                "Facets Automation"
+            )
+        }
+    }
+}
+
+# -----------------------------
+# Main
+# -----------------------------
+Initialize-RunFolders
+
+Write-Progress -Activity "Execution Task" -Status "Started" -PercentComplete 5
+Write-StepLog "Facets automation started"
+
+if (($RunAll.ToUpper() -ne "Y") -and [string]::IsNullOrWhiteSpace($RunModule)) {
+    $RunModule = Show-ModulePopup
+
+    if ([string]::IsNullOrWhiteSpace($RunModule)) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "No option selected. Script will stop.",
+            "Facets Automation"
+        )
+        Write-StepLog "No option selected. Script stopped."
+        exit
+    }
+}
+
+if ($RunAll.ToUpper() -eq "Y") {
+    $RunModule = "All"
+}
+
+Write-StepLog "Selected module: $RunModule"
+New-Screenshot -StepName "Selected_$RunModule" | Out-Null
+
+Start-SelectedFlow -SelectedModule $RunModule
+
+Write-StepLog "Facets automation completed"
+Write-Progress -Activity "Execution Task" -Status "Completed" -PercentComplete 100
