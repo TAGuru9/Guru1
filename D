@@ -1,6 +1,7 @@
 =LET(
 y,YEAR(TODAY()),
 d,DATE(y,1,1),
-seq,SEQUENCE(110,1,d,1),
+last,DATE(y,12,31),
+seq,SEQUENCE(last-d+1,1,d,1),
 FILTER(seq,(WEEKDAY(seq)=3)+(WEEKDAY(seq)=5))
 )
