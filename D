@@ -1,1 +1,6 @@
-=IF(WEEKDAY(G2)=3,"Design Gate (Tue)","Code Gate (Thu)")
+=LET(
+y,YEAR(TODAY()),
+d,DATE(y,1,1),
+seq,SEQUENCE(110,1,d,1),
+FILTER(seq,(WEEKDAY(seq)=3)+(WEEKDAY(seq)=5))
+)
