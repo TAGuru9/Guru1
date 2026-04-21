@@ -1,435 +1,151 @@
 package com.acfc.automation.report.kpi;
 
-import java.io.FileWriter;
-import java.io.PrintWriter;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
-public class KpiReporter {
+public class KpiRuntimeParams {
 
-    private static final Object LOCK = new Object();
-    private static String runId;
+    private static Map<String, String> parsedArgs;
 
-    private KpiReporter() {
+    private KpiRuntimeParams() {
     }
 
-    public static void initRun() {
-        if (runId == null) {
-            runId = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-        }
-    }
-
-    public static String getRunId() {
-        initRun();
-        return runId;
-    }
-
-    public static void writeTestcaseKpi(KpiEntry entry) {
-        initRun();
-
-        String rawKpi = System.getProperty("kpi", "").trim();
-        Map<String, String> kpiMap = parseKpi(rawKpi);
-
-        try {
-            Path dir;
-            if (entry.getReportPath() != null && !entry.getReportPath().isBlank()) {
-                Path reportFile = Paths.get(entry.getReportPath());
-                Path reportDir = reportFile.getParent();
-                Path buildDir = reportDir;
-
-                while (buildDir != null
-                        && buildDir.getFileName() != null
-                        && !buildDir.getFileName().toString().equalsIgnoreCase("build")) {
-                    buildDir = buildDir.getParent();
-                }
-
-                if (buildDir != null) {
-                    dir = buildDir.resolve("reports").resolve("kpi");
-                } else {
-                    dir = Paths.get("build", "reports", "kpi");
-                }
-            } else {
-                dir = Paths.get("build", "reports", "kpi");
-            }
-
-            Files.createDirectories(dir);
-
-            Path file = dir.resolve("KPI_" + runId + ".csv");
-            boolean newFile = !Files.exists(file);
-
-            synchronized (LOCK) {
-                try (PrintWriter writer = new PrintWriter(new FileWriter(file.toFile(), true))) {
-                    if (newFile) {
-                        writer.println(
-                                "runId,project,suite,type,env,tcId,tcName,executionMode,iteration,status,durationMs,dataFile,payloadFile,reportPath,errorMessage,"
-                                        + "framework,site,changeid,product,application,release,testsuiteType,repository,branch,testsuiteArgs,userid,buildUrl,executor,executionSource,vm"
-                        );
-                    }
-
-                    writer.println(
-                            csv(runId)
-                                    + "," + csv(entry.getProject())
-                                    + "," + csv(entry.getSuite())
-                                    + "," + csv(entry.getType())
-                                    + "," + csv(entry.getEnv())
-                                    + "," + csv(entry.getTcId())
-                                    + "," + csv(entry.getTcName())
-                                    + "," + csv(entry.getExecutionMode())
-                                    + "," + csv(entry.getIteration())
-                                    + "," + csv(entry.getStatus())
-                                    + "," + entry.getDurationMs()
-                                    + "," + csv(entry.getDataFile())
-                                    + "," + csv(entry.getPayloadFile())
-                                    + "," + csv(entry.getReportPath())
-                                    + "," + csv(entry.getErrorMessage())
-                                    + "," + csv(kpiMap.getOrDefault("framework", ""))
-                                    + "," + csv(kpiMap.getOrDefault("site", ""))
-                                    + "," + csv(kpiMap.getOrDefault("changeid", ""))
-                                    + "," + csv(kpiMap.getOrDefault("product", ""))
-                                    + "," + csv(kpiMap.getOrDefault("application", ""))
-                                    + "," + csv(kpiMap.getOrDefault("release", ""))
-                                    + "," + csv(kpiMap.getOrDefault("testsuiteType", ""))
-                                    + "," + csv(kpiMap.getOrDefault("repository", ""))
-                                    + "," + csv(kpiMap.getOrDefault("branch", ""))
-                                    + "," + csv(kpiMap.getOrDefault("testsuiteArgs", ""))
-                                    + "," + csv(resolveUserId(kpiMap))
-                                    + "," + csv(resolveBuildUrl(kpiMap, entry.getReportPath()))
-                                    + "," + csv(resolveExecutor(kpiMap))
-                                    + "," + csv(resolveExecutionSource(kpiMap))
-                                    + "," + csv(resolveVm(kpiMap))
-                    );
-                }
-            }
-
-            System.out.println("KPI written for testcase: " + safe(entry.getTcId()));
-        } catch (Exception e) {
-            System.out.println("Failed to write testcase KPI csv: " + e.getMessage());
-        }
-    }
-
-    public static void writeSuiteSummaryKpi(String project,
-                                            String suite,
-                                            String type,
-                                            String env,
-                                            int total,
-                                            int passed,
-                                            int failed,
-                                            int skipped,
-                                            long durationMs,
-                                            String reportPath) {
-        initRun();
-
-        String rawKpi = System.getProperty("kpi", "").trim();
-        Map<String, String> kpiMap = parseKpi(rawKpi);
-
-        try {
-            Path dir;
-            if (reportPath != null && !reportPath.isBlank()) {
-                Path reportFile = Paths.get(reportPath);
-                Path reportDir = reportFile.getParent();
-                Path buildDir = reportDir;
-
-                while (buildDir != null
-                        && buildDir.getFileName() != null
-                        && !buildDir.getFileName().toString().equalsIgnoreCase("build")) {
-                    buildDir = buildDir.getParent();
-                }
-
-                if (buildDir != null) {
-                    dir = buildDir.resolve("reports").resolve("kpi");
-                } else {
-                    dir = Paths.get("build", "reports", "kpi");
-                }
-            } else {
-                dir = Paths.get("build", "reports", "kpi");
-            }
-
-            Files.createDirectories(dir);
-
-            Path file = dir.resolve("KPI_SUITE_" + runId + ".csv");
-            boolean newFile = !Files.exists(file);
-
-            synchronized (LOCK) {
-                try (PrintWriter writer = new PrintWriter(new FileWriter(file.toFile(), true))) {
-                    if (newFile) {
-                        writer.println(
-                                "runId,project,suite,type,env,total,passed,failed,skipped,durationMs,reportPath,"
-                                        + "framework,site,changeid,product,application,release,testsuiteType,repository,branch,testsuiteArgs,userid,buildUrl,executor,executionSource,vm"
-                        );
-                    }
-
-                    writer.println(
-                            csv(runId)
-                                    + "," + csv(project)
-                                    + "," + csv(suite)
-                                    + "," + csv(type)
-                                    + "," + csv(env)
-                                    + "," + total
-                                    + "," + passed
-                                    + "," + failed
-                                    + "," + skipped
-                                    + "," + durationMs
-                                    + "," + csv(reportPath)
-                                    + "," + csv(kpiMap.getOrDefault("framework", ""))
-                                    + "," + csv(kpiMap.getOrDefault("site", ""))
-                                    + "," + csv(kpiMap.getOrDefault("changeid", ""))
-                                    + "," + csv(kpiMap.getOrDefault("product", ""))
-                                    + "," + csv(kpiMap.getOrDefault("application", ""))
-                                    + "," + csv(kpiMap.getOrDefault("release", ""))
-                                    + "," + csv(kpiMap.getOrDefault("testsuiteType", ""))
-                                    + "," + csv(kpiMap.getOrDefault("repository", ""))
-                                    + "," + csv(kpiMap.getOrDefault("branch", ""))
-                                    + "," + csv(kpiMap.getOrDefault("testsuiteArgs", ""))
-                                    + "," + csv(resolveUserId(kpiMap))
-                                    + "," + csv(resolveBuildUrl(kpiMap, reportPath))
-                                    + "," + csv(resolveExecutor(kpiMap))
-                                    + "," + csv(resolveExecutionSource(kpiMap))
-                                    + "," + csv(resolveVm(kpiMap))
-                    );
-                }
-            }
-
-            insertSuiteSummaryToDb(project, suite, type, env, total, passed, failed, skipped, durationMs, reportPath);
-
-            System.out.println("KPI suite summary written and inserted successfully.");
-        } catch (Exception e) {
-            System.out.println("Failed to write suite summary KPI: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private static void insertSuiteSummaryToDb(String project,
-                                               String suite,
-                                               String type,
-                                               String env,
-                                               int total,
-                                               int passed,
-                                               int failed,
-                                               int skipped,
-                                               long durationMs,
-                                               String reportPath) {
-        try {
-            String rawKpi = System.getProperty("kpi", "").trim();
-            Map<String, String> kpiMap = parseKpi(rawKpi);
-
-            String dbUrl = firstNonBlank(
-                    System.getProperty("kpi.db.url"),
-                    System.getProperty("mysql.url"),
-                    System.getProperty("db.url")
+    private static Map<String, String> args() {
+        if (parsedArgs == null) {
+            parsedArgs = KpiArgsParser.parse(
+                    FrameworkConfig.getProperty("kpiArgs", "")
             );
-            String dbUser = firstNonBlank(
-                    System.getProperty("kpi.db.username"),
-                    System.getProperty("mysql.username"),
-                    System.getProperty("db.username")
-            );
-            String dbPassword = firstNonBlank(
-                    System.getProperty("kpi.db.password"),
-                    System.getProperty("mysql.password"),
-                    System.getProperty("db.password")
-            );
-
-            if (isBlank(dbUrl) || isBlank(dbUser)) {
-                System.out.println("KPI DB insert skipped: DB connection properties not configured.");
-                return;
-            }
-
-            String sql = "INSERT INTO ta_reporting.ta_model ("
-                    + "TA_FRAMEWORK, TA_SITE, TA_CHANGEID, TA_PRODUCT, TA_APPLICATION, TA_ENVTYPE, "
-                    + "TA_RELEASE, TA_TESTSUITE_TYPE, TA_REPOSITORY, TA_BUILD_GIT_BRANCH, TA_TESTSUITE_ARGS, "
-                    + "TA_USERID, TA_STATUS, TA_PASS, TA_FAIL, TA_SKIPWARN, TA_PERCENTAGE, "
-                    + "TA_BUILD_URL, TA_EXECUTOR, TA_EXECUTION_SOURCE, TA_VM"
-                    + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-
-            try (Connection connection = DriverManager.getConnection(dbUrl, dbUser, dbPassword);
-                 PreparedStatement ps = connection.prepareStatement(sql)) {
-
-                String framework = kpiMap.getOrDefault("framework", "NA");
-                String site = kpiMap.getOrDefault("site", "NA");
-                String changeId = kpiMap.getOrDefault("changeid", "NA");
-                String product = kpiMap.getOrDefault("product", "NA");
-                String application = firstNonBlank(kpiMap.get("application"), project, "NA");
-                String envType = firstNonBlank(kpiMap.get("env"), env, "NA");
-                String release = kpiMap.getOrDefault("release", "NA");
-                String testsuiteType = firstNonBlank(kpiMap.get("testsuiteType"), type, "NA");
-                String repository = kpiMap.getOrDefault("repository", "NA");
-                String branch = kpiMap.getOrDefault("branch", "NA");
-                String testsuiteArgs = kpiMap.getOrDefault("testsuiteArgs", "NA");
-                String userid = resolveUserId(kpiMap);
-
-                String status;
-                if (failed > 0) {
-                    status = "FAIL";
-                } else if (passed > 0 && failed == 0) {
-                    status = "PASS";
-                } else {
-                    status = "WARN";
-                }
-
-                double percentage = total > 0 ? ((double) passed * 100.0) / total : 0.0;
-
-                String buildUrl = resolveBuildUrl(kpiMap, reportPath);
-                String executor = resolveExecutor(kpiMap);
-                String executionSource = resolveExecutionSource(kpiMap);
-                String vm = resolveVm(kpiMap);
-
-                int i = 1;
-                ps.setString(i++, framework);
-                ps.setString(i++, site);
-                ps.setString(i++, changeId);
-                ps.setString(i++, product);
-                ps.setString(i++, application);
-                ps.setString(i++, envType);
-                ps.setString(i++, release);
-                ps.setString(i++, testsuiteType);
-                ps.setString(i++, repository);
-                ps.setString(i++, branch);
-                ps.setString(i++, testsuiteArgs);
-                ps.setString(i++, userid);
-                ps.setString(i++, status);
-                ps.setInt(i++, passed);
-                ps.setInt(i++, failed);
-                ps.setInt(i++, skipped);
-                ps.setDouble(i++, percentage);
-                ps.setString(i++, buildUrl);
-                ps.setString(i++, executor);
-                ps.setString(i++, executionSource);
-                ps.setString(i++, vm);
-
-                ps.executeUpdate();
-            }
-
-            System.out.println("KPI inserted into ta_reporting.ta_model successfully.");
-        } catch (Exception e) {
-            System.out.println("Failed to insert KPI summary into MySQL: " + e.getMessage());
-            e.printStackTrace();
         }
+        return parsedArgs;
     }
 
-    private static Map<String, String> parseKpi(String raw) {
-        Map<String, String> map = new LinkedHashMap<>();
-
-        if (raw == null || raw.isBlank()) {
-            return map;
-        }
-
-        String[] pairs = raw.split(";");
-        for (String pair : pairs) {
-            if (pair == null || pair.isBlank()) {
-                continue;
-            }
-
-            String[] kv = pair.split("=", 2);
-            String key = kv[0].trim();
-            String value = kv.length > 1 ? kv[1].trim() : "";
-
-            if (!key.isBlank()) {
-                map.put(key, value);
-            }
-        }
-
-        return map;
+    public static String framework() {
+        return KpiArgsParser.get(args(), "framework", "PepperAPI");
     }
 
-    private static String extractNestedArg(String rawArgs, String wantedKey) {
-        if (rawArgs == null || rawArgs.isBlank() || wantedKey == null || wantedKey.isBlank()) {
+    public static String site() {
+        return KpiArgsParser.get(args(), "site", "automation");
+    }
+
+    public static String changeId() {
+        return KpiArgsParser.get(args(), "changeId", "NA");
+    }
+
+    public static String product() {
+        return KpiArgsParser.get(args(), "product", "NA");
+    }
+
+    public static String application() {
+        return KpiArgsParser.get(args(), "application", FrameworkConfig.projectName());
+    }
+
+    public static String envType() {
+        return KpiArgsParser.get(args(), "env", FrameworkConfig.env());
+    }
+
+    public static String release() {
+        return KpiArgsParser.get(args(), "release", "NA");
+    }
+
+    public static String testSuiteType() {
+        return KpiArgsParser.get(
+                args(),
+                "testSuiteType",
+                FrameworkConfig.getProperty("type", "NA")
+        );
+    }
+
+    public static String repository() {
+        return KpiArgsParser.get(args(), "repository", "NA");
+    }
+
+    public static String gitBranch() {
+        return KpiArgsParser.get(args(), "gitBranch", "NA");
+    }
+
+    public static String userId() {
+        return KpiArgsParser.get(
+                args(),
+                "userId",
+                System.getProperty("user.name", "NA")
+        );
+    }
+
+    public static String buildUrl() {
+        return KpiArgsParser.get(args(), "buildUrl", "NA");
+    }
+
+    public static String executor() {
+        return KpiArgsParser.get(
+                args(),
+                "executor",
+                System.getProperty("user.name", "NA")
+        );
+    }
+
+    public static String executionSource() {
+        String buildUrl = System.getenv("BUILD_URL");
+        return KpiArgsParser.get(
+                args(),
+                "executionSource",
+                !safe(buildUrl).equals("NA") ? "Jenkins" : "Local"
+        );
+    }
+
+    public static String vm() {
+        return KpiArgsParser.get(
+                args(),
+                "vm",
+                firstNonBlank(
+                        System.getenv("COMPUTERNAME"),
+                        System.getenv("HOSTNAME"),
+                        "NA"
+                )
+        );
+    }
+
+    public static String testSuiteArgs(String reportPath) {
+        String userId = KpiArgsParser.get(
+                args(),
+                "userId",
+                System.getProperty("user.name", "NA")
+        );
+
+        String password = KpiArgsParser.get(args(), "password", "NA");
+        if (!"NA".equalsIgnoreCase(password)) {
+            password = "*******";
+        }
+
+        String reportFile = extractReportName(reportPath);
+
+        return "userId=" + safe(userId)
+                + ",password=" + safe(password)
+                + ",report=" + safe(reportFile);
+    }
+
+    private static String extractReportName(String path) {
+        if (path == null || path.isBlank()) {
             return "NA";
         }
 
-        String[] pairs = rawArgs.split(",");
-        for (String pair : pairs) {
-            if (pair == null || pair.isBlank()) {
-                continue;
-            }
-
-            String[] kv = pair.split("=", 2);
-            String key = kv[0].trim();
-            String value = kv.length > 1 ? kv[1].trim() : "";
-
-            if (wantedKey.equalsIgnoreCase(key)) {
-                return value.isBlank() ? "NA" : value;
-            }
+        int idx = path.lastIndexOf('/');
+        if (idx == -1) {
+            idx = path.lastIndexOf('\\');
         }
 
-        return "NA";
-    }
-
-    private static String resolveUserId(Map<String, String> kpiMap) {
-        return firstNonBlank(
-                extractNestedArg(kpiMap.get("testsuiteArgs"), "userid"),
-                kpiMap.get("userid"),
-                System.getProperty("user.name"),
-                System.getenv("USERNAME"),
-                "NA"
-        );
-    }
-
-    private static String resolveBuildUrl(Map<String, String> kpiMap, String reportPath) {
-        return firstNonBlank(
-                kpiMap.get("buildUrl"),
-                System.getenv("BUILD_URL"),
-                reportPath,
-                "NA"
-        );
-    }
-
-    private static String resolveExecutor(Map<String, String> kpiMap) {
-        return firstNonBlank(
-                kpiMap.get("executor"),
-                System.getProperty("user.name"),
-                System.getenv("USERNAME"),
-                "NA"
-        );
-    }
-
-    private static String resolveExecutionSource(Map<String, String> kpiMap) {
-        String buildUrl = System.getenv("BUILD_URL");
-
-        return firstNonBlank(
-                kpiMap.get("executionSource"),
-                System.getenv("JOB_NAME"),
-                !isBlank(buildUrl) ? "Jenkins" : "",
-                "Local"
-        );
-    }
-
-    private static String resolveVm(Map<String, String> kpiMap) {
-        return firstNonBlank(
-                kpiMap.get("vm"),
-                System.getenv("COMPUTERNAME"),
-                System.getenv("HOSTNAME"),
-                "NA"
-        );
+        return idx != -1 ? path.substring(idx + 1) : path;
     }
 
     private static String firstNonBlank(String... values) {
         if (values == null) {
-            return "";
+            return "NA";
         }
 
-        for (String value : values) {
-            if (value != null && !value.isBlank()) {
-                return value.trim();
+        for (String v : values) {
+            if (v != null && !v.isBlank()) {
+                return v.trim();
             }
         }
-
-        return "";
-    }
-
-    private static boolean isBlank(String value) {
-        return value == null || value.isBlank();
-    }
-
-    private static String csv(String value) {
-        String v = safe(value).replace("\"", "\"\"");
-        return "\"" + v + "\"";
+        return "NA";
     }
 
     private static String safe(String value) {
