@@ -1,0 +1,1 @@
+=IF(WEEKDAY(G2)=3,"Design Gate (Tue)","Code Gate (Thu)")
