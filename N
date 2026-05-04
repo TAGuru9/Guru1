@@ -1,0 +1,23 @@
+Start
+↓
+Add Entry in Weekly Tracker
+↓
+Design Review
+↓
+Design Approved?
+   → No → Rework Design → Back to Design Review
+   → Yes ↓
+Script Development
+↓
+Code Review
+↓
+Code Approved?
+   → No → Fix Code → Back to Code Review
+   → Yes ↓
+Execution Ready
+↓
+Execute Tests
+↓
+Update Report Link
+↓
+End
