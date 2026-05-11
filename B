@@ -1,97 +1,82 @@
-private void validateExpectedJsonPaths(TestCase testCase,
-                                       Response response,
-                                       ValidationOutcome outcome) {
+// JSON Response Validation using JSONPath
+if (testCase.getExpectedBodyJsonPaths() != null
+        && !testCase.getExpectedBodyJsonPaths().isEmpty()) {
 
-    Map<String, String> validations =
-            testCase.getExpectedBodyJsonPaths();
+    JsonPath jsonPathResponse = response.jsonPath();
 
-    if (validations == null || validations.isEmpty()) {
-        return;
-    }
-
-    for (Map.Entry<String, String> entry : validations.entrySet()) {
+    for (Map.Entry<String, String> entry :
+            testCase.getExpectedBodyJsonPaths().entrySet()) {
 
         String jsonPath = entry.getKey();
-        String expected = entry.getValue();
+        String expected = replaceContextValues(entry.getValue());
 
         try {
 
-            Object actualObject =
-                    response.jsonPath().get(jsonPath);
+            Object actualObj = jsonPathResponse.get(jsonPath);
 
             String actual =
-                    actualObject == null
+                    actualObj == null
                             ? "null"
-                            : actualObject.toString();
+                            : actualObj.toString();
 
-            boolean passed = false;
+            boolean matched;
 
+            // contains validation
             if (expected.startsWith("contains:")) {
 
                 String expectedContains =
-                        expected.replace("contains:", "");
+                        expected.replace("contains:", "").trim();
 
-                if (actualObject instanceof List) {
+                matched = actual.contains(expectedContains);
 
-                    List<?> actualList =
-                            (List<?>) actualObject;
+            }
+            // equals validation
+            else {
 
-                    passed =
-                            actualList.contains(expectedContains);
-
-                } else {
-
-                    passed =
-                            actual.contains(expectedContains);
-                }
-
-                System.out.println(
-                        "Type: JSONPATH_CONTAINS | Field: "
-                                + jsonPath
-                                + " | Expected: "
-                                + expectedContains
-                                + " | Actual: "
-                                + actual
-                );
-
-            } else {
-
-                passed = expected.equals(actual);
-
-                System.out.println(
-                        "Type: JSONPATH | Field: "
-                                + jsonPath
-                                + " | Expected: "
-                                + expected
-                                + " | Actual: "
-                                + actual
-                );
+                matched = expected.equals(actual);
             }
 
-            if (passed) {
-                outcome.pass(
-                        "JSONPATH",
-                        jsonPath,
-                        expected,
-                        actual
-                );
-            } else {
-                outcome.fail(
-                        "JSONPATH",
-                        jsonPath,
-                        expected,
-                        actual
-                );
+            System.out.println(
+                    "Type: JSONPATH | Field: "
+                            + jsonPath
+                            + " | Expected: "
+                            + expected
+                            + " | Actual: "
+                            + actual
+                            + " | Result: "
+                            + (matched ? "PASS" : "FAIL")
+            );
+
+            details.add(new ValidationDetail(
+                    "JSONPATH",
+                    jsonPath,
+                    expected,
+                    actual,
+                    matched ? "PASS" : "FAIL"
+            ));
+
+            if (!matched) {
+                finalStatus = "FAIL";
             }
 
         } catch (Exception e) {
 
-            outcome.fail(
+            System.out.println(
+                    "Type: JSONPATH | Field: "
+                            + jsonPath
+                            + " | ERROR: "
+                            + e.getMessage()
+            );
+
+            details.add(new ValidationDetail(
                     "JSONPATH",
                     jsonPath,
                     expected,
-                    "ERROR: " + e.getMessage()
-            );
+                    "ERROR: " + e.getMessage(),
+                    "FAIL"
+            ));
+
+            finalStatus = "FAIL";
         }
     }
 }
