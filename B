@@ -1,5 +1,97 @@
-=IF(OR(G2="Rejected",J2="Rejected"),"Rejected",
- IF(OR(G2="Blocked",J2="Blocked"),"Blocked",
- IF(OR(G2="Rework",J2="Rework"),"Rework",
- IF(OR(G2="Pending",J2="Pending"),"Pending",
- IF(AND(G2="Approved",J2="Approved"),"Approved","")))))
+private void validateExpectedJsonPaths(TestCase testCase,
+                                       Response response,
+                                       ValidationOutcome outcome) {
+
+    Map<String, String> validations =
+            testCase.getExpectedBodyJsonPaths();
+
+    if (validations == null || validations.isEmpty()) {
+        return;
+    }
+
+    for (Map.Entry<String, String> entry : validations.entrySet()) {
+
+        String jsonPath = entry.getKey();
+        String expected = entry.getValue();
+
+        try {
+
+            Object actualObject =
+                    response.jsonPath().get(jsonPath);
+
+            String actual =
+                    actualObject == null
+                            ? "null"
+                            : actualObject.toString();
+
+            boolean passed = false;
+
+            if (expected.startsWith("contains:")) {
+
+                String expectedContains =
+                        expected.replace("contains:", "");
+
+                if (actualObject instanceof List) {
+
+                    List<?> actualList =
+                            (List<?>) actualObject;
+
+                    passed =
+                            actualList.contains(expectedContains);
+
+                } else {
+
+                    passed =
+                            actual.contains(expectedContains);
+                }
+
+                System.out.println(
+                        "Type: JSONPATH_CONTAINS | Field: "
+                                + jsonPath
+                                + " | Expected: "
+                                + expectedContains
+                                + " | Actual: "
+                                + actual
+                );
+
+            } else {
+
+                passed = expected.equals(actual);
+
+                System.out.println(
+                        "Type: JSONPATH | Field: "
+                                + jsonPath
+                                + " | Expected: "
+                                + expected
+                                + " | Actual: "
+                                + actual
+                );
+            }
+
+            if (passed) {
+                outcome.pass(
+                        "JSONPATH",
+                        jsonPath,
+                        expected,
+                        actual
+                );
+            } else {
+                outcome.fail(
+                        "JSONPATH",
+                        jsonPath,
+                        expected,
+                        actual
+                );
+            }
+
+        } catch (Exception e) {
+
+            outcome.fail(
+                    "JSONPATH",
+                    jsonPath,
+                    expected,
+                    "ERROR: " + e.getMessage()
+            );
+        }
+    }
+}
