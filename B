@@ -1,42 +1,44 @@
 setlocal EnableDelayedExpansion
 cd /d "%WORKSPACE%"
 
+set PROJECT_NAME=
+
+if /I "%TA_APPLICATION%"=="cdr" set PROJECT_NAME=project-cdr
+if /I "%TA_APPLICATION%"=="memberEligibility" set PROJECT_NAME=project-memberEligibility
+if /I "%TA_APPLICATION%"=="membereligibility" set PROJECT_NAME=project-memberEligibility
+
+echo TA_APPLICATION=%TA_APPLICATION%
+echo PROJECT_NAME=%PROJECT_NAME%
+echo TC_IDS=%TC_IDS%
+
+if "%PROJECT_NAME%"=="" (
+  echo ERROR: Invalid TA_APPLICATION=%TA_APPLICATION%
+  exit /b 1
+)
+
 set RUN_ARGS=
 
-REM ===== ENV =====
-set RUN_ARGS=!RUN_ARGS! -Denv=%TA_ENVTYPE%
-
-REM ===== TC FILE =====
 if not "%TC_FILE%"=="" (
-    echo %TC_FILE% > "%WORKSPACE%\tcFile.b64"
-    certutil -decode "%WORKSPACE%\tcFile.b64" "%WORKSPACE%\testcase.json"
-
-    set RUN_ARGS=!RUN_ARGS! -DtcFile="%WORKSPACE%\testcase.json"
+  echo Using uploaded TC file
+  echo %TC_FILE% > "%WORKSPACE%\tcFile.b64"
+  certutil -decode "%WORKSPACE%\tcFile.b64" "%WORKSPACE%\testcase.json"
+  set RUN_ARGS=!RUN_ARGS! -DtcFile="%WORKSPACE%\testcase.json"
+) else (
+  set RUN_ARGS=!RUN_ARGS! -Dids=%TC_IDS%
 )
 
-REM ===== DATA FILE =====
 if not "%DATA_FILE%"=="" (
-    echo %DATA_FILE% > "%WORKSPACE%\dataFile.b64"
-    certutil -decode "%WORKSPACE%\dataFile.b64" "%WORKSPACE%\data.csv"
-
-    set RUN_ARGS=!RUN_ARGS! -DdataFile="%WORKSPACE%\data.csv"
+  echo Using uploaded DATA file
+  echo %DATA_FILE% > "%WORKSPACE%\dataFile.b64"
+  certutil -decode "%WORKSPACE%\dataFile.b64" "%WORKSPACE%\data.csv"
+  set RUN_ARGS=!RUN_ARGS! -DdataFile="%WORKSPACE%\data.csv"
 )
 
-REM ===== IDS ONLY WHEN NO FILE =====
-if "%TC_FILE%"=="" (
-    set RUN_ARGS=!RUN_ARGS! -Dids=%TC_IDS%
-)
+echo RUN_ARGS=!RUN_ARGS!
 
-REM ===== APPEND EXISTING EXTRA ARGS =====
-if not "%TA_TESTSUITE_ARGS%"=="" (
-    set RUN_ARGS=!RUN_ARGS! %TA_TESTSUITE_ARGS%
-)
-
-echo Final Args:
-echo !RUN_ARGS!
-
-call gradlew.bat clean :project-%TA_APPLICATION%:test ^
--Dproject=project-%TA_APPLICATION% ^
+call gradlew.bat clean :%PROJECT_NAME%:test ^
+-Denv=%TA_ENVTYPE% ^
+-Dproject=%PROJECT_NAME% ^
 -DkpiArgs=framework=%TA_FRAMEWORK%;site=%TA_SITE%;changeId=%TA_CHANGEID%;product=%TA_PRODUCT%;application=%TA_APPLICATION%;env=%TA_ENVTYPE%;release=%TA_RELEASE%;testSuiteType=%TA_TESTSUITE_TYPE%;repository=%TA_REPOSITORY%;branch=%TA_BUILD_GIT_BRANCH%;buildUrl=%BUILD_URL%;executor=%BUILD_USER_ID%;executionSource=Jenkins ^
 !RUN_ARGS! ^
 --rerun-tasks --no-build-cache
