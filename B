@@ -1,37 +1,42 @@
+setlocal EnableDelayedExpansion
 cd /d "%WORKSPACE%"
 
-echo Workspace=%WORKSPACE%
-echo Application=%TA_APPLICATION%
-echo TC IDs=%TC_IDS%
+set RUN_ARGS=
 
-if not exist "%WORKSPACE%\uploaded" mkdir "%WORKSPACE%\uploaded"
+REM ===== ENV =====
+set RUN_ARGS=!RUN_ARGS! -Denv=%TA_ENVTYPE%
 
-REM Decode uploaded testcase file if provided
+REM ===== TC FILE =====
 if not "%TC_FILE%"=="" (
-    echo %TC_FILE% > "%WORKSPACE%\uploaded\tcFile.b64"
-    certutil -decode "%WORKSPACE%\uploaded\tcFile.b64" "%WORKSPACE%\uploaded\testcase.json"
-    set TC_FILE_PATH=%WORKSPACE%\uploaded\testcase.json
-) else (
-    set TC_FILE_PATH=
+    echo %TC_FILE% > "%WORKSPACE%\tcFile.b64"
+    certutil -decode "%WORKSPACE%\tcFile.b64" "%WORKSPACE%\testcase.json"
+
+    set RUN_ARGS=!RUN_ARGS! -DtcFile="%WORKSPACE%\testcase.json"
 )
 
-REM Decode uploaded data file if provided
+REM ===== DATA FILE =====
 if not "%DATA_FILE%"=="" (
-    echo %DATA_FILE% > "%WORKSPACE%\uploaded\dataFile.b64"
-    certutil -decode "%WORKSPACE%\uploaded\dataFile.b64" "%WORKSPACE%\uploaded\data.csv"
-    set DATA_FILE_PATH=%WORKSPACE%\uploaded\data.csv
-) else (
-    set DATA_FILE_PATH=
+    echo %DATA_FILE% > "%WORKSPACE%\dataFile.b64"
+    certutil -decode "%WORKSPACE%\dataFile.b64" "%WORKSPACE%\data.csv"
+
+    set RUN_ARGS=!RUN_ARGS! -DdataFile="%WORKSPACE%\data.csv"
 )
 
-echo Final TC File=%TC_FILE_PATH%
-echo Final Data File=%DATA_FILE_PATH%
+REM ===== IDS ONLY WHEN NO FILE =====
+if "%TC_FILE%"=="" (
+    set RUN_ARGS=!RUN_ARGS! -Dids=%TC_IDS%
+)
 
-gradlew.bat clean :%TA_APPLICATION%:test ^
--Denv=%TA_ENVTYPE% ^
--Dids=%TC_IDS% ^
+REM ===== APPEND EXISTING EXTRA ARGS =====
+if not "%TA_TESTSUITE_ARGS%"=="" (
+    set RUN_ARGS=!RUN_ARGS! %TA_TESTSUITE_ARGS%
+)
+
+echo Final Args:
+echo !RUN_ARGS!
+
+call gradlew.bat clean :project-%TA_APPLICATION%:test ^
 -Dproject=project-%TA_APPLICATION% ^
--DtcFile="%TC_FILE_PATH%" ^
--DdataFile="%DATA_FILE_PATH%" ^
--DkpiArgs=framework=%TA_FRAMEWORK%;site=%TA_SITE%;changeId=%TA_CHANGEID%;product=%TA_PRODUCT%;application=%TA_APPLICATION%;env=%TA_ENVTYPE%;release=%TA_RELEASE%;testSuiteType=%TA_TESTSUITE_TYPE%;repository=%TA_REPOSITORY%;branch=%TA_BUILD_GIT_BRANCH%;testSuiteArgs=%TA_TESTSUITE_ARGS%;buildUrl=%BUILD_URL%;executor=%BUILD_USER_ID%;executionSource=Jenkins ^
+-DkpiArgs=framework=%TA_FRAMEWORK%;site=%TA_SITE%;changeId=%TA_CHANGEID%;product=%TA_PRODUCT%;application=%TA_APPLICATION%;env=%TA_ENVTYPE%;release=%TA_RELEASE%;testSuiteType=%TA_TESTSUITE_TYPE%;repository=%TA_REPOSITORY%;branch=%TA_BUILD_GIT_BRANCH%;buildUrl=%BUILD_URL%;executor=%BUILD_USER_ID%;executionSource=Jenkins ^
+!RUN_ARGS! ^
 --rerun-tasks --no-build-cache
