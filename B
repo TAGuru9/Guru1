@@ -1,45 +1,37 @@
-SELECT
-    YEAR(R.RN_EXECUTION_DATE) AS EXEC_YEAR,
+cd /d "%WORKSPACE%"
 
-    CAST(R.RN_EXECUTION_DATE AS DATE) AS EXEC_DATE,
+echo Workspace=%WORKSPACE%
+echo Application=%TA_APPLICATION%
+echo TC IDs=%TC_IDS%
 
-    DATEADD(WEEK, DATEDIFF(WEEK, 0, R.RN_EXECUTION_DATE), 0) AS WEEK_START_DATE,
-    DATEADD(DAY, 6, DATEADD(WEEK, DATEDIFF(WEEK, 0, R.RN_EXECUTION_DATE), 0)) AS WEEK_END_DATE,
+if not exist "%WORKSPACE%\uploaded" mkdir "%WORKSPACE%\uploaded"
 
-    FORMAT(R.RN_EXECUTION_DATE, 'yyyy-MM') AS EXEC_MONTH,
+REM Decode uploaded testcase file if provided
+if not "%TC_FILE%"=="" (
+    echo %TC_FILE% > "%WORKSPACE%\uploaded\tcFile.b64"
+    certutil -decode "%WORKSPACE%\uploaded\tcFile.b64" "%WORKSPACE%\uploaded\testcase.json"
+    set TC_FILE_PATH=%WORKSPACE%\uploaded\testcase.json
+) else (
+    set TC_FILE_PATH=
+)
 
-    CONCAT(
-        YEAR(R.RN_EXECUTION_DATE),
-        '-Q',
-        DATEPART(QUARTER, R.RN_EXECUTION_DATE)
-    ) AS EXEC_QUARTER,
+REM Decode uploaded data file if provided
+if not "%DATA_FILE%"=="" (
+    echo %DATA_FILE% > "%WORKSPACE%\uploaded\dataFile.b64"
+    certutil -decode "%WORKSPACE%\uploaded\dataFile.b64" "%WORKSPACE%\uploaded\data.csv"
+    set DATA_FILE_PATH=%WORKSPACE%\uploaded\data.csv
+) else (
+    set DATA_FILE_PATH=
+)
 
-    R.RN_TESTER_NAME AS TESTER_ID,
-    U.FULL_NAME AS TESTER_FULL_NAME,
+echo Final TC File=%TC_FILE_PATH%
+echo Final Data File=%DATA_FILE_PATH%
 
-    R.RN_STATUS AS STATUS,
-
-    COUNT(*) AS TOTAL_EXECUTIONS
-
-FROM [amfc_isqat_db].[td].[run] R
-LEFT JOIN qcsitadmin_db_25_1_1.TD.USERS U
-    ON R.RN_TESTER_NAME = U.USER_NAME
-
-WHERE
-    R.RN_EXECUTION_DATE >= DATEFROMPARTS(YEAR(GETDATE()), 1, 1)
-    AND R.RN_EXECUTION_DATE < DATEFROMPARTS(YEAR(GETDATE()) + 1, 1, 1)
-
-GROUP BY
-    YEAR(R.RN_EXECUTION_DATE),
-    CAST(R.RN_EXECUTION_DATE AS DATE),
-    DATEADD(WEEK, DATEDIFF(WEEK, 0, R.RN_EXECUTION_DATE), 0),
-    FORMAT(R.RN_EXECUTION_DATE, 'yyyy-MM'),
-    DATEPART(QUARTER, R.RN_EXECUTION_DATE),
-    R.RN_TESTER_NAME,
-    U.FULL_NAME,
-    R.RN_STATUS
-
-ORDER BY
-    EXEC_DATE,
-    TESTER_FULL_NAME,
-    STATUS;
+gradlew.bat clean :%TA_APPLICATION%:test ^
+-Denv=%TA_ENVTYPE% ^
+-Dids=%TC_IDS% ^
+-Dproject=project-%TA_APPLICATION% ^
+-DtcFile="%TC_FILE_PATH%" ^
+-DdataFile="%DATA_FILE_PATH%" ^
+-DkpiArgs=framework=%TA_FRAMEWORK%;site=%TA_SITE%;changeId=%TA_CHANGEID%;product=%TA_PRODUCT%;application=%TA_APPLICATION%;env=%TA_ENVTYPE%;release=%TA_RELEASE%;testSuiteType=%TA_TESTSUITE_TYPE%;repository=%TA_REPOSITORY%;branch=%TA_BUILD_GIT_BRANCH%;testSuiteArgs=%TA_TESTSUITE_ARGS%;buildUrl=%BUILD_URL%;executor=%BUILD_USER_ID%;executionSource=Jenkins ^
+--rerun-tasks --no-build-cache
