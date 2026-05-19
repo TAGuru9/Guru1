@@ -10,7 +10,8 @@ WITH FolderTree AS (
         0 AS Level_No,
         CF.CF_ITEM_NAME AS Year_Folder,
         CAST(NULL AS VARCHAR(255)) AS Main_Folder,
-        CAST(NULL AS VARCHAR(255)) AS Project_Folder
+        CAST(NULL AS VARCHAR(255)) AS Project_Folder,
+        CAST(NULL AS VARCHAR(255)) AS Test_Breaker
     FROM CYCL_FOLD CF
     WHERE CF.CF_ITEM_NAME LIKE '%' + @YEAR + '%'
 
@@ -22,7 +23,6 @@ WITH FolderTree AS (
         C.CF_ITEM_NAME,
         CAST(FT.Folder_Path + ' > ' + C.CF_ITEM_NAME AS VARCHAR(MAX)) AS Folder_Path,
         FT.Level_No + 1,
-
         FT.Year_Folder,
 
         CASE 
@@ -33,7 +33,12 @@ WITH FolderTree AS (
         CASE 
             WHEN FT.Level_No = 1 THEN C.CF_ITEM_NAME
             ELSE FT.Project_Folder
-        END AS Project_Folder
+        END AS Project_Folder,
+
+        CASE 
+            WHEN FT.Level_No >= 2 THEN C.CF_ITEM_NAME
+            ELSE FT.Test_Breaker
+        END AS Test_Breaker
 
     FROM CYCL_FOLD C
     INNER JOIN FolderTree FT
@@ -44,6 +49,7 @@ SELECT
     FT.Year_Folder,
     FT.Main_Folder,
     FT.Project_Folder,
+    FT.Test_Breaker,
 
     SUM(CASE 
             WHEN UPPER(TS.TS_NAME) LIKE 'TA_%'
@@ -69,13 +75,16 @@ INNER JOIN TEST TS
 
 WHERE FT.Main_Folder = @MAIN_FOLDER
   AND FT.Project_Folder IS NOT NULL
+  AND FT.Test_Breaker IS NOT NULL
 
 GROUP BY
     FT.Year_Folder,
     FT.Main_Folder,
-    FT.Project_Folder
+    FT.Project_Folder,
+    FT.Test_Breaker
 
 ORDER BY
     FT.Year_Folder,
     FT.Main_Folder,
-    FT.Project_Folder;
+    FT.Project_Folder,
+    FT.Test_Breaker;
