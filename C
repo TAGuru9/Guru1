@@ -1,15 +1,17 @@
+DECLARE @YEAR VARCHAR(4) = '2021';
+
 SELECT 
     CY.CY_CYCLE AS Folder_Name,
 
-    COUNT(CASE 
+    SUM(CASE 
             WHEN UPPER(TS.TS_NAME) LIKE 'TA_%'
-            THEN 1
-          END) AS Automated_Count,
+            THEN 1 ELSE 0
+        END) AS Automated_Count,
 
-    COUNT(CASE 
+    SUM(CASE 
             WHEN UPPER(TS.TS_NAME) NOT LIKE 'TA_%'
-            THEN 1
-          END) AS Manual_Count,
+            THEN 1 ELSE 0
+        END) AS Manual_Count,
 
     COUNT(*) AS Total_Count
 
@@ -19,6 +21,8 @@ INNER JOIN TESTCYCL TC
 
 INNER JOIN CYCLE CY
     ON TC.TC_CYCLE_ID = CY.CY_CYCLE_ID
+
+WHERE CY.CY_CYCLE LIKE '%' + @YEAR + '%'
 
 GROUP BY CY.CY_CYCLE
 ORDER BY CY.CY_CYCLE;
