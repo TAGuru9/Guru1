@@ -11,7 +11,8 @@ WITH FolderTree AS (
         CF.CF_ITEM_NAME AS Year_Folder,
         CAST(NULL AS VARCHAR(255)) AS Main_Folder,
         CAST(NULL AS VARCHAR(255)) AS Project_Folder,
-        CAST(NULL AS VARCHAR(255)) AS Test_Breaker
+        CAST(NULL AS VARCHAR(255)) AS Test_Breaker,
+        CAST(NULL AS VARCHAR(255)) AS Sub_Folder
     FROM CYCL_FOLD CF
     WHERE CF.CF_ITEM_NAME LIKE '%' + @YEAR + '%'
 
@@ -21,27 +22,17 @@ WITH FolderTree AS (
         C.CF_ITEM_ID,
         C.CF_FATHER_ID,
         C.CF_ITEM_NAME,
-        CAST(FT.Folder_Path + ' > ' + C.CF_ITEM_NAME AS VARCHAR(MAX)) AS Folder_Path,
+        CAST(FT.Folder_Path + ' > ' + C.CF_ITEM_NAME AS VARCHAR(MAX)),
         FT.Level_No + 1,
         FT.Year_Folder,
 
-        CASE 
-            WHEN FT.Level_No = 0 THEN C.CF_ITEM_NAME
-            ELSE FT.Main_Folder
-        END AS Main_Folder,
-
-        CASE 
-            WHEN FT.Level_No = 1 THEN C.CF_ITEM_NAME
-            ELSE FT.Project_Folder
-        END AS Project_Folder,
-
-        CASE 
-            WHEN FT.Level_No >= 2 THEN C.CF_ITEM_NAME
-            ELSE FT.Test_Breaker
-        END AS Test_Breaker
+        CASE WHEN FT.Level_No = 0 THEN C.CF_ITEM_NAME ELSE FT.Main_Folder END,
+        CASE WHEN FT.Level_No = 1 THEN C.CF_ITEM_NAME ELSE FT.Project_Folder END,
+        CASE WHEN FT.Level_No = 2 THEN C.CF_ITEM_NAME ELSE FT.Test_Breaker END,
+        CASE WHEN FT.Level_No >= 3 THEN C.CF_ITEM_NAME ELSE FT.Sub_Folder END
 
     FROM CYCL_FOLD C
-    INNER JOIN FolderTree FT
+    JOIN FolderTree FT
         ON C.CF_FATHER_ID = FT.CF_ITEM_ID
 )
 
@@ -50,6 +41,7 @@ SELECT
     FT.Main_Folder,
     FT.Project_Folder,
     FT.Test_Breaker,
+    ISNULL(FT.Sub_Folder, FT.CF_ITEM_NAME) AS Sub_Folder,
 
     SUM(CASE 
             WHEN UPPER(TS.TS_NAME) LIKE 'TA_%'
@@ -64,13 +56,13 @@ SELECT
     COUNT(*) AS Functional_TC_Count
 
 FROM FolderTree FT
-INNER JOIN CYCLE CY
+JOIN CYCLE CY
     ON CY.CY_FOLDER_ID = FT.CF_ITEM_ID
 
-INNER JOIN TESTCYCL TC
+JOIN TESTCYCL TC
     ON TC.TC_CYCLE_ID = CY.CY_CYCLE_ID
 
-INNER JOIN TEST TS
+JOIN TEST TS
     ON TS.TS_TEST_ID = TC.TC_TEST_ID
 
 WHERE FT.Main_Folder = @MAIN_FOLDER
@@ -81,10 +73,12 @@ GROUP BY
     FT.Year_Folder,
     FT.Main_Folder,
     FT.Project_Folder,
-    FT.Test_Breaker
+    FT.Test_Breaker,
+    ISNULL(FT.Sub_Folder, FT.CF_ITEM_NAME)
 
 ORDER BY
     FT.Year_Folder,
     FT.Main_Folder,
     FT.Project_Folder,
-    FT.Test_Breaker;
+    FT.Test_Breaker,
+    Sub_Folder;
