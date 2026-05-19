@@ -1,0 +1,24 @@
+SELECT 
+    CY.CY_CYCLE AS Folder_Name,
+
+    COUNT(CASE 
+            WHEN UPPER(TS.TS_NAME) LIKE 'TA_%'
+            THEN 1
+          END) AS Automated_Count,
+
+    COUNT(CASE 
+            WHEN UPPER(TS.TS_NAME) NOT LIKE 'TA_%'
+            THEN 1
+          END) AS Manual_Count,
+
+    COUNT(*) AS Total_Count
+
+FROM TEST TS
+INNER JOIN TESTCYCL TC
+    ON TS.TS_TEST_ID = TC.TC_TEST_ID
+
+INNER JOIN CYCLE CY
+    ON TC.TC_CYCLE_ID = CY.CY_CYCLE_ID
+
+GROUP BY CY.CY_CYCLE
+ORDER BY CY.CY_CYCLE;
