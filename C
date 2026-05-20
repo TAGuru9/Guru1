@@ -1,23 +1,9 @@
-String apiType = testCase.getApiType();
+private String apiType;
 
-if ("REST".equalsIgnoreCase(apiType)) {
-
-    System.out.println("Running REST JSON validation");
-
-    validateExpectedJsonPaths(
-            testCase,
-            response,
-            details
-    );
+public String getApiType() {
+    return apiType;
 }
 
-if ("SOAP".equalsIgnoreCase(apiType)) {
-
-    System.out.println("Running SOAP XPath validation");
-
-    validateExpectedXpaths(
-            testCase,
-            response,
-            details
-    );
+public void setApiType(String apiType) {
+    this.apiType = apiType;
 }
