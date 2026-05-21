@@ -1,5 +1,69 @@
-oauth2.tokenUrl=https:
-oauth2.clientId=
-oauth2.clientSecret=xx
-oauth2.scope=cx
-oauth2.grantType=xx
+package com.acfc.automation.auth;
+
+import com.acfc.automation.config.FrameworkConfig;
+import com.acfc.automation.model.TestCase;
+import io.restassured.RestAssured;
+import io.restassured.response.Response;
+
+import java.util.Map;
+
+public class TokenManager {
+
+    private static String cachedToken;
+    private static long tokenExpiryTime = 0;
+
+    private TokenManager() {
+    }
+
+    public static String getToken(TestCase testCase) {
+
+        if (cachedToken != null && System.currentTimeMillis() < tokenExpiryTime) {
+            return cachedToken;
+        }
+
+        Map<String, String> auth = testCase.getAuth();
+
+        String tokenUrl = getValue(auth, "tokenUrl", "oauth2.tokenUrl");
+        String clientId = getValue(auth, "clientId", "oauth2.clientId");
+        String clientSecret = getValue(auth, "clientSecret", "oauth2.clientSecret");
+        String scope = getValue(auth, "scope", "oauth2.scope");
+        String grantType = getValue(auth, "grantType", "oauth2.grantType");
+
+        System.out.println("Generating OAuth2 token...");
+
+        Response response = RestAssured
+                .given()
+                .contentType("application/x-www-form-urlencoded")
+                .formParam("grant_type", grantType)
+                .formParam("client_id", clientId)
+                .formParam("client_secret", clientSecret)
+                .formParam("scope", scope)
+                .post(tokenUrl);
+
+        if (response.statusCode() != 200) {
+            throw new RuntimeException("OAuth2 token generation failed: " + response.asPrettyString());
+        }
+
+        cachedToken = response.jsonPath().getString("access_token");
+
+        Integer expiresIn = response.jsonPath().getInt("expires_in");
+        if (expiresIn == null) {
+            expiresIn = 1800;
+        }
+
+        tokenExpiryTime = System.currentTimeMillis() + ((expiresIn - 60) * 1000L);
+
+        System.out.println("OAuth2 token generated successfully");
+
+        return cachedToken;
+    }
+
+    private static String getValue(Map<String, String> auth, String authKey, String configKey) {
+
+        if (auth != null && auth.get(authKey) != null && !auth.get(authKey).isBlank()) {
+            return auth.get(authKey);
+        }
+
+        return FrameworkConfig.getProperty(configKey);
+    }
+}
