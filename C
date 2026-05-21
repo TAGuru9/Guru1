@@ -1,9 +1,5 @@
-private String apiType;
-
-public String getApiType() {
-    return apiType;
-}
-
-public void setApiType(String apiType) {
-    this.apiType = apiType;
-}
+oauth2.tokenUrl=https:
+oauth2.clientId=
+oauth2.clientSecret=xx
+oauth2.scope=cx
+oauth2.grantType=xx
