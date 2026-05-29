@@ -1,47 +1,140 @@
-private String resolvePayloadFile(TestCase testCase) {
+@echo off
+setlocal EnableDelayedExpansion
 
-    String method = testCase.getMethod();
+cd /d "%WORKSPACE%"
 
-    // GET / DELETE usually no payload needed
-    if (method != null &&
-            (method.equalsIgnoreCase("GET")
-                    || method.equalsIgnoreCase("DELETE"))) {
+echo ==========================================
+echo Jenkins Runtime Inputs
+echo ==========================================
+echo WORKSPACE=%WORKSPACE%
+echo TA_PROJECT=%TA_PROJECT%
+echo ENVTYPE=%ENVTYPE%
+echo IDS=%IDS%
+echo TC_FILE=%TC_FILE%
+echo DATA_FILE=%DATA_FILE%
+echo PAYLOAD_FILE=%PAYLOAD_FILE%
 
-        System.out.println("No payload required for method: " + method);
-        return null;
-    }
+REM ==========================================
+REM Validate Project
+REM Example:
+REM TA_PROJECT=project-cdr
+REM TA_PROJECT=project-member
+REM ==========================================
+if "%TA_PROJECT%"=="" (
+    echo ERROR: TA_PROJECT is required
+    exit /b 1
+)
 
-    String runtimePayloadFile =
-            System.getProperty("payloadFile", "").trim();
+set PROJECT_NAME=%TA_PROJECT%
 
-    if (!runtimePayloadFile.isBlank()) {
-        System.out.println("Using runtime payload file: " + runtimePayloadFile);
-        return runtimePayloadFile;
-    }
+REM ==========================================
+REM Base Paths
+REM ==========================================
+set PROJECT_PATH=%WORKSPACE%\%PROJECT_NAME%
+set RESOURCE_PATH=%PROJECT_PATH%\src\test\resources
+set PAYLOAD_TEMPLATE_PATH=%RESOURCE_PATH%\payloads\templates
 
-    String tcPayloadFile = testCase.getPayloadFile();
+echo PROJECT_PATH=%PROJECT_PATH%
+echo RESOURCE_PATH=%RESOURCE_PATH%
+echo PAYLOAD_TEMPLATE_PATH=%PAYLOAD_TEMPLATE_PATH%
 
-    if (tcPayloadFile != null
-            && !tcPayloadFile.trim().isBlank()
-            && !tcPayloadFile.trim().equalsIgnoreCase("${payloadFile}")) {
+REM ==========================================
+REM Base Runtime Args
+REM ==========================================
+set RUN_ARGS=-Denv=%ENVTYPE%
+set RUN_ARGS=!RUN_ARGS! -DpayloadBasePath="%RESOURCE_PATH%"
 
-        String payload = tcPayloadFile.trim();
+if not "%IDS%"=="" (
+    set RUN_ARGS=!RUN_ARGS! -Dids=%IDS%
+)
 
-        if (!java.nio.file.Paths.get(payload).isAbsolute()
-                && !payload.contains("src/test/resources")
-                && !payload.contains("src\\test\\resources")) {
+REM ==========================================
+REM TC FILE (Optional)
+REM ==========================================
+if not "%TC_FILE%"=="" (
 
-            payload = java.nio.file.Paths
-                    .get("src", "test", "resources")
-                    .resolve(payload)
-                    .toString();
-        }
+    set TC_PATH=%WORKSPACE%\uploaded\%TC_FILE%
 
-        System.out.println("Using test case payload file: " + payload);
-        return payload;
-    }
+    if exist "!TC_PATH!" (
+        echo Using uploaded TC file:
+        echo !TC_PATH!
 
-    throw new RuntimeException(
-            "Payload file is missing for method: " + method
-    );
-}
+        set RUN_ARGS=!RUN_ARGS! -DtcFile="!TC_PATH!"
+    ) else (
+        echo ERROR: TC file not found:
+        echo !TC_PATH!
+        exit /b 1
+    )
+)
+
+REM ==========================================
+REM DATA FILE (Optional)
+REM ==========================================
+if not "%DATA_FILE%"=="" (
+
+    set DATA_PATH=%WORKSPACE%\uploaded\%DATA_FILE%
+
+    if exist "!DATA_PATH!" (
+        echo Using uploaded DATA file:
+        echo !DATA_PATH!
+
+        set RUN_ARGS=!RUN_ARGS! -DdataFile="!DATA_PATH!"
+    ) else (
+        echo ERROR: DATA file not found:
+        echo !DATA_PATH!
+        exit /b 1
+    )
+)
+
+REM ==========================================
+REM PAYLOAD FILE (Optional)
+REM 1. Uploaded payload
+REM 2. Framework payload template
+REM 3. No payload -> framework testcase JSON
+REM ==========================================
+if not "%PAYLOAD_FILE%"=="" (
+
+    set UPLOAD_PAYLOAD=%WORKSPACE%\uploaded\%PAYLOAD_FILE%
+    set FRAMEWORK_PAYLOAD=%PAYLOAD_TEMPLATE_PATH%\%PAYLOAD_FILE%
+
+    if exist "!UPLOAD_PAYLOAD!" (
+
+        echo Using uploaded payload:
+        echo !UPLOAD_PAYLOAD!
+
+        set RUN_ARGS=!RUN_ARGS! -DpayloadFile="!UPLOAD_PAYLOAD!"
+
+    ) else if exist "!FRAMEWORK_PAYLOAD!" (
+
+        echo Using framework payload:
+        echo !FRAMEWORK_PAYLOAD!
+
+        set RUN_ARGS=!RUN_ARGS! -DpayloadFile="!FRAMEWORK_PAYLOAD!"
+
+    ) else (
+
+        echo ERROR: Payload file not found
+        echo Checked:
+        echo !UPLOAD_PAYLOAD!
+        echo !FRAMEWORK_PAYLOAD!
+        exit /b 1
+    )
+
+) else (
+
+    echo No payload uploaded.
+    echo Framework will use testcase JSON payload path.
+    echo Base path:
+    echo !RESOURCE_PATH!
+)
+
+echo ==========================================
+echo FINAL EXECUTION
+echo ==========================================
+echo gradlew.bat clean %PROJECT_NAME%:test !RUN_ARGS!
+
+call gradlew.bat clean %PROJECT_NAME%:test ^
+ !RUN_ARGS! ^
+ --rerun-tasks --no-build-cache --stacktrace
+
+exit /b %ERRORLEVEL%
