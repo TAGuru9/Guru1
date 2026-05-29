@@ -16,7 +16,7 @@ echo DATA_FILE=%DATA_FILE%
 echo PAYLOAD_FILE=%PAYLOAD_FILE%
 
 REM ==========================================
-REM Resolve project/module dynamically
+REM Resolve project/module
 REM ==========================================
 set PROJECT_NAME=
 
@@ -65,13 +65,15 @@ if not exist "%PROJECT_PATH%" (
 )
 
 REM ==========================================
-REM Base runtime args
+REM Runtime args
 REM ==========================================
 set RUN_ARGS=-Denv=%RUN_ENV%
 set RUN_ARGS=!RUN_ARGS! -DpayloadBasePath="%RESOURCE_PATH%"
 
 if not "%IDS%"=="" (
     set RUN_ARGS=!RUN_ARGS! -Dids=%IDS%
+) else (
+    echo WARNING: IDS is empty. Framework may not execute any testcase.
 )
 
 REM ==========================================
@@ -110,8 +112,6 @@ if not "%DATA_FILE%"=="" (
 
 REM ==========================================
 REM PAYLOAD file optional
-REM - If user uploads/selects payload, use it
-REM - If no payload, framework uses testcase JSON with payloadBasePath
 REM ==========================================
 if not "%PAYLOAD_FILE%"=="" (
 
@@ -152,4 +152,11 @@ call gradlew.bat clean %PROJECT_NAME%:test ^
  -Dargs="framework=%TA_FRAMEWORK%;site=%TA_SITE%;channel=%TA_CHANNEL%;product=%TA_PRODUCT%;application=%TA_APPLICATION%;env=%RUN_ENV%;release=%TA_RELEASE%;testSuiteType=%TA_TESTSUITETYPE%;repoHistory=%TA_REPOSITORY%;gitBranch=%BRANCH%;buildUrl=%BUILD_URL%;executor=%BUILD_USER_ID%;executionSource=Jenkins;vm=%COMPUTERNAME%" ^
  --rerun-tasks --no-build-cache --stacktrace
 
-exit /b %ERRORLEVEL%
+set BUILD_EXIT_CODE=%ERRORLEVEL%
+
+echo ==========================================
+echo Gradle finished
+echo BUILD_EXIT_CODE=%BUILD_EXIT_CODE%
+echo ==========================================
+
+exit /b %BUILD_EXIT_CODE%
