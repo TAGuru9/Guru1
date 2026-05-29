@@ -1,111 +1,53 @@
-@echo off
-setlocal EnableDelayedExpansion
+“Good morning everyone! Before we jump into the presentation, I thought we’d start with something fun and interactive to wake everyone up a little.” 😄
 
-cd /d "%WORKSPACE%"
+“So, quick audience participation — no pressure, but I want everyone involved.”
 
-echo ==========================================
-echo Jenkins Runtime Inputs
-echo ==========================================
-echo WORKSPACE=%WORKSPACE%
-echo TA_APPLICATION=%TA_APPLICATION%
-echo TA_ENVTYPE=%TA_ENVTYPE%
-echo ENVTYPE=%ENVTYPE%
-echo TC_IDS=%TC_IDS%
-echo IDS=%IDS%
-echo TC_FILE=%TC_FILE%
-echo DATA_FILE=%DATA_FILE%
-echo PAYLOAD_FILE=%PAYLOAD_FILE%
+“How would you rate your gardening experience?”
 
-REM Resolve project name
-set PROJECT_NAME=
+“Let’s see — who here is a Green Thumb Pro? The people who can grow anything and somehow every plant survives?”
 
-if /I "%TA_APPLICATION%"=="cdr" set PROJECT_NAME=project-cdr
-if /I "%TA_APPLICATION%"=="membereligibility" set PROJECT_NAME=project-memberEligibility
+(Pause and react to people raising hands)
 
-if "%PROJECT_NAME%"=="" (
-    echo ERROR: Invalid TA_APPLICATION=%TA_APPLICATION%
-    exit /b 1
-)
+“Nice! We may need gardening tips from you after this meeting.”
 
-REM Resolve environment
-set RUN_ENV=%ENVTYPE%
-if "%RUN_ENV%"=="" set RUN_ENV=%TA_ENVTYPE%
+“What about our Growing Learners — you’ve tried a few things, maybe kept a plant alive for at least a month?”
 
-REM Correct project paths
-set PROJECT_PATH=%WORKSPACE%\%PROJECT_NAME%
-set RESOURCE_PATH=%PROJECT_PATH%\src\test\resources
-set PAYLOAD_TEMPLATE_PATH=%RESOURCE_PATH%\payloads\templates
-set UPLOAD_DIR=%WORKSPACE%\uploaded
+(Pause for laughs)
 
-echo PROJECT_NAME=%PROJECT_NAME%
-echo PROJECT_PATH=%PROJECT_PATH%
-echo RESOURCE_PATH=%RESOURCE_PATH%
-echo PAYLOAD_TEMPLATE_PATH=%PAYLOAD_TEMPLATE_PATH%
+“Any Total Beginners? Be honest! No judgment here — some of us struggle to keep even a tiny plant alive.”
 
-REM Build runtime args
-set RUN_ARGS=-Denv=%RUN_ENV%
-set RUN_ARGS=!RUN_ARGS! -DpayloadBasePath="!RESOURCE_PATH!"
+(Laugh lightly)
 
-REM TC ID handling
-set RUN_IDS=%TC_IDS%
-if "%RUN_IDS%"=="" set RUN_IDS=%IDS%
+“And finally… who’s just here for lunch and enjoying the gardens?”
 
-if not "%RUN_IDS%"=="" (
-    echo Running by TC IDS: %RUN_IDS%
-    set RUN_ARGS=!RUN_ARGS! -Dids=%RUN_IDS%
-) else (
-    echo ERROR: TC_IDS or IDS is empty
-    exit /b 1
-)
+(People will laugh)
 
-REM Optional TC file
-if not "%TC_FILE%"=="" (
-    set RUN_ARGS=!RUN_ARGS! -DtcFile="%UPLOAD_DIR%\%TC_FILE%"
-)
+“Honestly, whichever category you fall into, that’s completely okay.”
 
-REM Optional DATA file
-if not "%DATA_FILE%"=="" (
-    set RUN_ARGS=!RUN_ARGS! -DdataFile="%UPLOAD_DIR%\%DATA_FILE%"
-)
+“Because this is really what community is about — learning together, trying something new, connecting with others, and just taking a break from our normal day-to-day work.”
 
-REM Optional PAYLOAD file
-if not "%PAYLOAD_FILE%"=="" (
-    set UPLOAD_PAYLOAD=%UPLOAD_DIR%\%PAYLOAD_FILE%
-    set FRAMEWORK_PAYLOAD=%PAYLOAD_TEMPLATE_PATH%\%PAYLOAD_FILE%
+“And fun fact — apparently spending time in gardens can reduce stress, so technically we’re investing in wellness too!”
 
-    if exist "!UPLOAD_PAYLOAD!" (
-        echo Using uploaded payload:
-        echo !UPLOAD_PAYLOAD!
-        set RUN_ARGS=!RUN_ARGS! -DpayloadFile="!UPLOAD_PAYLOAD!"
-    ) else (
-        echo Using framework payload:
-        echo !FRAMEWORK_PAYLOAD!
-        set RUN_ARGS=!RUN_ARGS! -DpayloadFile="!FRAMEWORK_PAYLOAD!"
-    )
-) else (
-    echo No PAYLOAD_FILE selected.
-    echo Framework will resolve testcase payload using:
-    echo !RESOURCE_PATH!
-)
+“Speaking of community and connection, that’s actually a perfect transition into what CAPSA is all about and why we do what we do.”
 
-echo ==========================================
-echo FINAL EXECUTION DETAILS
-echo ==========================================
-echo PROJECT_NAME=%PROJECT_NAME%
-echo RUN_ENV=%RUN_ENV%
-echo RUN_ARGS=!RUN_ARGS!
-echo ==========================================
+⸻
 
-call gradlew.bat clean %PROJECT_NAME%:test ^
- !RUN_ARGS! ^
- -Dargs="framework=%TA_FRAMEWORK%;site=%TA_SITE%;channel=%TA_CHANNEL%;product=%TA_PRODUCT%;application=%TA_APPLICATION%;env=%RUN_ENV%;release=%TA_RELEASE%;testSuiteType=%TA_TESTSUITETYPE%;repoHistory=%TA_REPOSITORY%;gitbranch=%BRANCH%;buildUrl=%BUILD_URL%;executor=%BUILD_USER_ID%;executionSource=Jenkins;vm=%COMPUTERNAME%" ^
- --rerun-tasks --no-build-cache --stacktrace
+“At CAPSA, our mission is really about creating an inclusive and supportive space for Asian American and Pacific Islander associates.”
 
-set BUILD_EXIT_CODE=%ERRORLEVEL%
+“But more than that, it’s about building connections, creating opportunities for growth, celebrating culture, and supporting one another — both personally and professionally.”
 
-echo ==========================================
-echo Gradle finished
-echo BUILD_EXIT_CODE=%BUILD_EXIT_CODE%
-echo ==========================================
+“We want this to be a place where people feel welcomed, heard, and empowered.”
 
-exit /b %BUILD_EXIT_CODE%
+“And the exciting part is — this community grows because of people like all of you.”
+
+“We currently have open positions within CAPSA, so if you’ve ever wanted to get more involved, contribute ideas, or make an impact — this is a great opportunity.”
+
+“Please feel free to reach out to Velshey if you’re interested in joining.”
+
+“And if you’re curious but want to learn more first, I highly encourage everyone to join the ARG meeting happening next month.”
+
+“It’s a great way to meet people, understand what we do, and see where you might want to get involved.”
+
+“At the end of the day, CAPSA is about community — and the more voices and participation we have, the stronger we become together.”
+
+“Hopefully we’ll see some new faces joining us soon. Thank you everyone!”
