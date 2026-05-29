@@ -1,76 +1,154 @@
-package com.acfc.automation.util;
+@echo off
+setlocal EnableDelayedExpansion
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+cd /d "%WORKSPACE%"
 
-public class FileResolver {
+echo ==========================================
+echo API Framework Jenkins Run
+echo ==========================================
+echo WORKSPACE         = %WORKSPACE%
+echo TA_FRAMEWORK      = %TA_FRAMEWORK%
+echo TA_SITE           = %TA_SITE%
+echo TA_CHANGEID       = %TA_CHANGEID%
+echo TA_PRODUCT        = %TA_PRODUCT%
+echo TA_APPLICATION    = %TA_APPLICATION%
+echo TC_IDS            = %TC_IDS%
+echo TC_File           = %TC_File%
+echo Data_File         = %Data_File%
+echo PAYLOAD_FILE      = %PAYLOAD_FILE%
+echo TA_ENVTYPE        = %TA_ENVTYPE%
+echo TA_RELEASE        = %TA_RELEASE%
+echo TA_TESTSUITE_TYPE = %TA_TESTSUITE_TYPE%
+echo TA_BUILD_GIT_BRANCH = %TA_BUILD_GIT_BRANCH%
+echo ==========================================
 
-    private FileResolver() {
-    }
+REM ==========================================
+REM Resolve Project Name
+REM ==========================================
+set "PROJECT_NAME="
 
-    public static Path resolve(String inputPath) {
+if /I "%TA_PRODUCT%"=="cdr" (
+    set "PROJECT_NAME=project-cdr"
+)
 
-        if (inputPath == null || inputPath.isBlank()) {
-            throw new IllegalArgumentException("Input path is blank");
-        }
+if /I "%TA_PRODUCT%"=="memberEligibility" (
+    set "PROJECT_NAME=project-membereligibility"
+)
 
-        String trimmed = inputPath.trim();
+if /I "%TA_PRODUCT%"=="claims" (
+    set "PROJECT_NAME=project-claims"
+)
 
-        // 1. Direct absolute or relative path
-        Path direct = Paths.get(trimmed);
-        if (Files.exists(direct)) {
-            return direct.toAbsolutePath().normalize();
-        }
+if /I "%TA_PRODUCT%"=="provider" (
+    set "PROJECT_NAME=project-provider"
+)
 
-        // 2. Jenkins payloadBasePath
-        String payloadBasePath = System.getProperty("payloadBasePath");
-        if (payloadBasePath != null && !payloadBasePath.isBlank()) {
-            Path jenkinsPath = Paths.get(payloadBasePath)
-                    .resolve(trimmed)
-                    .normalize();
+if "%PROJECT_NAME%"=="" (
+    echo ERROR: Invalid product selected: %TA_PRODUCT%
+    exit /b 1
+)
 
-            if (Files.exists(jenkinsPath)) {
-                return jenkinsPath.toAbsolutePath().normalize();
-            }
-        }
+echo Derived PROJECT_NAME = %PROJECT_NAME%
 
-        // 3. IDE run from inside module folder
-        Path ideModulePath = Paths.get(
-                        System.getProperty("user.dir"),
-                        "src", "test", "resources"
-                )
-                .resolve(trimmed)
-                .normalize();
+REM ==========================================
+REM Build Runtime Args
+REM ==========================================
+set "RUN_ARGS=-Dframework=%TA_FRAMEWORK%"
+set "RUN_ARGS=!RUN_ARGS! -Dsite=%TA_SITE%"
+set "RUN_ARGS=!RUN_ARGS! -DchangeId=%TA_CHANGEID%"
+set "RUN_ARGS=!RUN_ARGS! -Dproduct=%TA_PRODUCT%"
+set "RUN_ARGS=!RUN_ARGS! -Dapplication=%TA_APPLICATION%"
+set "RUN_ARGS=!RUN_ARGS! -Denv=%TA_ENVTYPE%"
+set "RUN_ARGS=!RUN_ARGS! -Drelease=%TA_RELEASE%"
+set "RUN_ARGS=!RUN_ARGS! -DtestSuiteType=%TA_TESTSUITE_TYPE%"
+set "RUN_ARGS=!RUN_ARGS! -DgitBranch=%TA_BUILD_GIT_BRANCH%"
 
-        if (Files.exists(ideModulePath)) {
-            return ideModulePath.toAbsolutePath().normalize();
-        }
+REM ==========================================
+REM TC IDS
+REM ==========================================
+if not "%TC_IDS%"=="" (
+    echo Running by TC IDs: %TC_IDS%
+    set "RUN_ARGS=!RUN_ARGS! -Dids=%TC_IDS%"
+)
 
-        // 4. IDE run from root repo with -Dproject=project-cdr
-        String projectName = System.getProperty("project");
-        Path ideProjectPath = null;
+REM ==========================================
+REM TC FILE
+REM ==========================================
+if not "%TC_File%"=="" (
 
-        if (projectName != null && !projectName.isBlank()) {
-            ideProjectPath = Paths.get(
-                            System.getProperty("user.dir"),
-                            projectName,
-                            "src", "test", "resources"
-                    )
-                    .resolve(trimmed)
-                    .normalize();
+    set "UPLOAD_TC_FILE=%WORKSPACE%\%TC_File%"
 
-            if (Files.exists(ideProjectPath)) {
-                return ideProjectPath.toAbsolutePath().normalize();
-            }
-        }
+    if exist "!UPLOAD_TC_FILE!" (
+        echo Using uploaded TC File:
+        echo !UPLOAD_TC_FILE!
 
-        throw new RuntimeException(
-                "File not found. Checked paths for: " + inputPath
-                        + "\nDirect: " + direct.toAbsolutePath().normalize()
-                        + "\nJenkins: " + payloadBasePath
-                        + "\nIDE Module: " + ideModulePath
-                        + "\nIDE Project: " + ideProjectPath
-        );
-    }
-}
+        set "RUN_ARGS=!RUN_ARGS! -DtcFile=!UPLOAD_TC_FILE!"
+    ) else (
+        echo ERROR: TC File not found
+        echo !UPLOAD_TC_FILE!
+        exit /b 1
+    )
+)
+
+REM ==========================================
+REM DATA FILE
+REM ==========================================
+if not "%Data_File%"=="" (
+
+    set "UPLOAD_DATA_FILE=%WORKSPACE%\%Data_File%"
+
+    if exist "!UPLOAD_DATA_FILE!" (
+        echo Using uploaded DATA File:
+        echo !UPLOAD_DATA_FILE!
+
+        set "RUN_ARGS=!RUN_ARGS! -DdataFile=!UPLOAD_DATA_FILE!"
+    ) else (
+        echo ERROR: DATA File not found
+        echo !UPLOAD_DATA_FILE!
+        exit /b 1
+    )
+)
+
+REM ==========================================
+REM PAYLOAD FILE
+REM ==========================================
+if not "%PAYLOAD_FILE%"=="" (
+
+    set "UPLOAD_PAYLOAD=%WORKSPACE%\%PAYLOAD_FILE%"
+
+    if exist "!UPLOAD_PAYLOAD!" (
+        echo Using uploaded PAYLOAD File:
+        echo !UPLOAD_PAYLOAD!
+
+        set "RUN_ARGS=!RUN_ARGS! -DpayloadFile=!UPLOAD_PAYLOAD!"
+    ) else (
+        echo ERROR: PAYLOAD File not found
+        echo !UPLOAD_PAYLOAD!
+        exit /b 1
+    )
+
+) else (
+    echo No payload uploaded.
+    echo Framework will use testcase payload.
+)
+
+echo ==========================================
+echo Final Execution
+echo ==========================================
+echo PROJECT_NAME = %PROJECT_NAME%
+echo RUN_ARGS     = !RUN_ARGS!
+echo ==========================================
+
+echo Final Gradle Command:
+echo gradlew.bat :%PROJECT_NAME%:test !RUN_ARGS! --no-build-cache
+
+call gradlew.bat :%PROJECT_NAME%:test !RUN_ARGS! --no-build-cache
+
+set BUILD_EXIT_CODE=%ERRORLEVEL%
+
+echo ==========================================
+echo Build Finished
+echo Exit Code = %BUILD_EXIT_CODE%
+echo ==========================================
+
+exit /b %BUILD_EXIT_CODE%
