@@ -1,25 +1,28 @@
-echo ==========================================
-echo DEBUG BASE64 PARAMETERS
-echo ==========================================
+REM PAYLOAD FILE
+if not "%PAYLOAD_FILE%"=="" (
 
-echo TC_File filename:
-echo %TC_File_FILENAME%
+    set "UPLOAD_DIR=%WORKSPACE%\uploaded"
 
-echo Data_File filename:
-echo %Data_File_FILENAME%
+    if not exist "%UPLOAD_DIR%" (
+        mkdir "%UPLOAD_DIR%"
+    )
 
-echo PAYLOAD_FILE filename:
-echo %PAYLOAD_FILE_FILENAME%
+    set "UPLOAD_PAYLOAD=%UPLOAD_DIR%\%PAYLOAD_FILE_FILENAME%"
 
-echo ------------------------------------------
+    echo Saving uploaded payload...
+    echo File Name = %PAYLOAD_FILE_FILENAME%
+    echo Save Path = !UPLOAD_PAYLOAD!
 
-powershell -NoProfile -Command ^
-"if($env:TC_File){'TC_File RECEIVED'} else {'TC_File EMPTY'}"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "[IO.File]::WriteAllBytes($env:UPLOAD_PAYLOAD,[Convert]::FromBase64String($env:PAYLOAD_FILE))"
 
-powershell -NoProfile -Command ^
-"if($env:Data_File){'Data_File RECEIVED'} else {'Data_File EMPTY'}"
+    if exist "!UPLOAD_PAYLOAD!" (
+        echo Payload saved successfully:
+        dir "%UPLOAD_DIR%"
 
-powershell -NoProfile -Command ^
-"if($env:PAYLOAD_FILE){'PAYLOAD_FILE RECEIVED'} else {'PAYLOAD_FILE EMPTY'}"
-
-echo ==========================================
+        set "RUN_ARGS=!RUN_ARGS! -DpayloadFile=!UPLOAD_PAYLOAD!"
+    ) else (
+        echo ERROR: Payload not saved
+        exit /b 1
+    )
+)
