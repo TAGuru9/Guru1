@@ -1,53 +1,49 @@
-“Good morning everyone! Before we jump into the presentation, I thought we’d start with something fun and interactive to wake everyone up a little.” 😄
+public static Path resolve(String inputPath) {
 
-“So, quick audience participation — no pressure, but I want everyone involved.”
+    if (inputPath == null || inputPath.isBlank()) {
+        throw new IllegalArgumentException("Input path is blank");
+    }
 
-“How would you rate your gardening experience?”
+    String trimmed = inputPath.trim();
 
-“Let’s see — who here is a Green Thumb Pro? The people who can grow anything and somehow every plant survives?”
+    // 1. Direct / absolute path (uploaded payload or full path)
+    Path direct = Paths.get(trimmed);
 
-(Pause and react to people raising hands)
+    if (Files.exists(direct)) {
+        return direct.toAbsolutePath().normalize();
+    }
 
-“Nice! We may need gardening tips from you after this meeting.”
+    // 2. Jenkins payloadBasePath
+    String payloadBasePath = System.getProperty("payloadBasePath");
 
-“What about our Growing Learners — you’ve tried a few things, maybe kept a plant alive for at least a month?”
+    if (payloadBasePath != null && !payloadBasePath.isBlank()) {
 
-(Pause for laughs)
+        Path jenkinsPath = Paths.get(payloadBasePath)
+                .resolve(trimmed)
+                .normalize();
 
-“Any Total Beginners? Be honest! No judgment here — some of us struggle to keep even a tiny plant alive.”
+        if (Files.exists(jenkinsPath)) {
+            return jenkinsPath.toAbsolutePath().normalize();
+        }
+    }
 
-(Laugh lightly)
+    // 3. IDE run (project-cdr / project-memberEligibility)
+    Path idePath = Paths.get(
+            System.getProperty("user.dir"),
+            "src",
+            "test",
+            "resources"
+    ).resolve(trimmed).normalize();
 
-“And finally… who’s just here for lunch and enjoying the gardens?”
+    if (Files.exists(idePath)) {
+        return idePath.toAbsolutePath().normalize();
+    }
 
-(People will laugh)
-
-“Honestly, whichever category you fall into, that’s completely okay.”
-
-“Because this is really what community is about — learning together, trying something new, connecting with others, and just taking a break from our normal day-to-day work.”
-
-“And fun fact — apparently spending time in gardens can reduce stress, so technically we’re investing in wellness too!”
-
-“Speaking of community and connection, that’s actually a perfect transition into what CAPSA is all about and why we do what we do.”
-
-⸻
-
-“At CAPSA, our mission is really about creating an inclusive and supportive space for Asian American and Pacific Islander associates.”
-
-“But more than that, it’s about building connections, creating opportunities for growth, celebrating culture, and supporting one another — both personally and professionally.”
-
-“We want this to be a place where people feel welcomed, heard, and empowered.”
-
-“And the exciting part is — this community grows because of people like all of you.”
-
-“We currently have open positions within CAPSA, so if you’ve ever wanted to get more involved, contribute ideas, or make an impact — this is a great opportunity.”
-
-“Please feel free to reach out to Velshey if you’re interested in joining.”
-
-“And if you’re curious but want to learn more first, I highly encourage everyone to join the ARG meeting happening next month.”
-
-“It’s a great way to meet people, understand what we do, and see where you might want to get involved.”
-
-“At the end of the day, CAPSA is about community — and the more voices and participation we have, the stronger we become together.”
-
-“Hopefully we’ll see some new faces joining us soon. Thank you everyone!”
+    throw new RuntimeException(
+            "File not found. Checked paths for: "
+                    + inputPath
+                    + "\nDirect: " + direct.toAbsolutePath()
+                    + "\nJenkins: " + payloadBasePath
+                    + "\nIDE: " + idePath
+    );
+}
