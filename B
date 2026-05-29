@@ -1,99 +1,47 @@
 private String resolvePayloadFile(TestCase testCase) {
 
-    // -------------------------------------------------------
-    // 1. First priority: Runtime/Jenkins uploaded payload
-    // Example:
-    // -DpayloadFile=C:/temp/test.json
-    // -------------------------------------------------------
+    String method = testCase.getMethod();
+
+    // GET / DELETE usually no payload needed
+    if (method != null &&
+            (method.equalsIgnoreCase("GET")
+                    || method.equalsIgnoreCase("DELETE"))) {
+
+        System.out.println("No payload required for method: " + method);
+        return null;
+    }
+
     String runtimePayloadFile =
             System.getProperty("payloadFile", "").trim();
 
     if (!runtimePayloadFile.isBlank()) {
-
-        String payload = runtimePayloadFile;
-
-        // If relative path, convert to project-relative path
-        if (!java.nio.file.Paths.get(payload).isAbsolute()) {
-
-            payload = java.nio.file.Paths
-                    .get(System.getProperty("user.dir"))
-                    .resolve(payload)
-                    .normalize()
-                    .toString();
-        }
-
-        System.out.println(
-                "Using runtime payload file: " + payload);
-
-        return payload;
+        System.out.println("Using runtime payload file: " + runtimePayloadFile);
+        return runtimePayloadFile;
     }
 
-    // -------------------------------------------------------
-    // 2. Second priority: Test case JSON payloadFile
-    // Example in test case JSON:
-    // "payloadFile":
-    // "payloads/templates/uat1_payload.json"
-    // -------------------------------------------------------
     String tcPayloadFile = testCase.getPayloadFile();
 
     if (tcPayloadFile != null
             && !tcPayloadFile.trim().isBlank()
-            && !tcPayloadFile.trim()
-            .equalsIgnoreCase("${payloadFile}")) {
+            && !tcPayloadFile.trim().equalsIgnoreCase("${payloadFile}")) {
 
         String payload = tcPayloadFile.trim();
 
-        // Absolute path → use directly
-        if (java.nio.file.Paths.get(payload).isAbsolute()) {
-
-            System.out.println(
-                    "Using absolute payload file: "
-                            + payload);
-
-            return payload;
-        }
-
-        // Already contains src/test/resources
-        if (payload.contains("src/test/resources")
-                || payload.contains("src\\test\\resources")) {
+        if (!java.nio.file.Paths.get(payload).isAbsolute()
+                && !payload.contains("src/test/resources")
+                && !payload.contains("src\\test\\resources")) {
 
             payload = java.nio.file.Paths
-                    .get(System.getProperty("user.dir"))
+                    .get("src", "test", "resources")
                     .resolve(payload)
-                    .normalize()
                     .toString();
-
-            System.out.println(
-                    "Using test case payload file: "
-                            + payload);
-
-            return payload;
         }
 
-        // Default relative payload
-        // payloads/templates/file.json
-        payload = java.nio.file.Paths
-                .get(System.getProperty("user.dir"),
-                        "src",
-                        "test",
-                        "resources")
-                .resolve(payload)
-                .normalize()
-                .toString();
-
-        System.out.println(
-                "Using test case payload file: "
-                        + payload);
-
+        System.out.println("Using test case payload file: " + payload);
         return payload;
     }
 
-    // -------------------------------------------------------
-    // 3. Nothing found
-    // -------------------------------------------------------
     throw new RuntimeException(
-            "Payload file is missing. " +
-            "Pass -DpayloadFile=<file path> " +
-            "or provide payloadFile in test case JSON."
+            "Payload file is missing for method: " + method
     );
 }
