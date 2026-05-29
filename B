@@ -1,124 +1,27 @@
-@echo off
-setlocal EnableDelayedExpansion
-
-cd /d "%WORKSPACE%"
-
-echo ==========================================
-echo API Framework Jenkins Run
-echo ==========================================
-echo WORKSPACE         = %WORKSPACE%
-echo TA_FRAMEWORK      = %TA_FRAMEWORK%
-echo TA_SITE           = %TA_SITE%
-echo TA_CHANGEID       = %TA_CHANGEID%
-echo TA_PRODUCT        = %TA_PRODUCT%
-echo TA_APPLICATION    = %TA_APPLICATION%
-echo TC_IDS            = %TC_IDS%
-echo TC_File filename  = %TC_File_FILENAME%
-echo Data_File filename= %Data_File_FILENAME%
-echo PAYLOAD filename  = %PAYLOAD_FILE_FILENAME%
-echo TA_ENVTYPE        = %TA_ENVTYPE%
-echo TA_RELEASE        = %TA_RELEASE%
-echo TA_TESTSUITE_TYPE = %TA_TESTSUITE_TYPE%
-echo ==========================================
-
-REM Project name from TA_PRODUCT
-set "PROJECT_NAME="
-
-if /I "%TA_PRODUCT%"=="cdr" set "PROJECT_NAME=project-cdr"
-if /I "%TA_PRODUCT%"=="memberEligibility" set "PROJECT_NAME=project-membereligibility"
-if /I "%TA_PRODUCT%"=="claims" set "PROJECT_NAME=project-claims"
-if /I "%TA_PRODUCT%"=="provider" set "PROJECT_NAME=project-provider"
-
-if "%PROJECT_NAME%"=="" (
-    echo ERROR: Invalid TA_PRODUCT selected: %TA_PRODUCT%
-    exit /b 1
-)
-
-echo Derived PROJECT_NAME = %PROJECT_NAME%
-
-REM Uploaded folder
-set "UPLOAD_DIR=%WORKSPACE%\uploaded"
-
-if not exist "!UPLOAD_DIR!" (
-    mkdir "!UPLOAD_DIR!"
-)
-
-echo Upload folder = !UPLOAD_DIR!
-
-REM Runtime args
-set "RUN_ARGS=-Dframework=%TA_FRAMEWORK%"
-set "RUN_ARGS=!RUN_ARGS! -Dsite=%TA_SITE%"
-set "RUN_ARGS=!RUN_ARGS! -DchangeId=%TA_CHANGEID%"
-set "RUN_ARGS=!RUN_ARGS! -Dproduct=%TA_PRODUCT%"
-set "RUN_ARGS=!RUN_ARGS! -Dapplication=%TA_APPLICATION%"
-set "RUN_ARGS=!RUN_ARGS! -Denv=%TA_ENVTYPE%"
-set "RUN_ARGS=!RUN_ARGS! -Drelease=%TA_RELEASE%"
-set "RUN_ARGS=!RUN_ARGS! -DtestSuiteType=%TA_TESTSUITE_TYPE%"
-set "RUN_ARGS=!RUN_ARGS! -DprojectName=%PROJECT_NAME%"
-
-if not "%TA_BUILD_GIT_BRANCH%"=="" (
-    set "RUN_ARGS=!RUN_ARGS! -DgitBranch=%TA_BUILD_GIT_BRANCH%"
-)
-
-if not "%TA_TESTSUITE_ARGS%"=="" (
-    set "RUN_ARGS=!RUN_ARGS! %TA_TESTSUITE_ARGS%"
-)
-
-REM TC IDS
-if not "%TC_IDS%"=="" (
-    echo Running by TC IDs: %TC_IDS%
-    set "RUN_ARGS=!RUN_ARGS! -Dids=%TC_IDS%"
-)
-
-REM TC FILE upload
-if not "%TC_File%"=="" (
-    set "UPLOAD_TC_FILE=!UPLOAD_DIR!\%TC_File_FILENAME%"
-
-    echo Saving TC file...
-    echo TC save path = !UPLOAD_TC_FILE!
-
-    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "[IO.File]::WriteAllBytes($env:UPLOAD_TC_FILE,[Convert]::FromBase64String($env:TC_File))"
-
-    if exist "!UPLOAD_TC_FILE!" (
-        echo TC file saved successfully:
-        echo !UPLOAD_TC_FILE!
-        set "RUN_ARGS=!RUN_ARGS! -DtcFile=!UPLOAD_TC_FILE!"
-    ) else (
-        echo ERROR: TC file was not saved.
-        exit /b 1
-    )
-)
-
-REM DATA FILE upload
-if not "%Data_File%"=="" (
-    set "UPLOAD_DATA_FILE=!UPLOAD_DIR!\%Data_File_FILENAME%"
-
-    echo Saving DATA file...
-    echo Data save path = !UPLOAD_DATA_FILE!
-
-    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "[IO.File]::WriteAllBytes($env:UPLOAD_DATA_FILE,[Convert]::FromBase64String($env:Data_File))"
-
-    if exist "!UPLOAD_DATA_FILE!" (
-        echo DATA file saved successfully:
-        echo !UPLOAD_DATA_FILE!
-        set "RUN_ARGS=!RUN_ARGS! -DdataFile=!UPLOAD_DATA_FILE!"
-    ) else (
-        echo ERROR: DATA file was not saved.
-        exit /b 1
-    )
-)
-
 REM PAYLOAD FILE upload
+set "PAYLOAD_CONTENT="
+set "PAYLOAD_NAME="
+
 if not "%PAYLOAD_FILE%"=="" (
-    set "UPLOAD_PAYLOAD=!UPLOAD_DIR!\%PAYLOAD_FILE_FILENAME%"
+    set "PAYLOAD_CONTENT=%PAYLOAD_FILE%"
+    set "PAYLOAD_NAME=%PAYLOAD_FILE_FILENAME%"
+)
+
+if not "%PAYLOAD_File%"=="" (
+    set "PAYLOAD_CONTENT=%PAYLOAD_File%"
+    set "PAYLOAD_NAME=%PAYLOAD_File_FILENAME%"
+)
+
+if not "!PAYLOAD_CONTENT!"=="" (
+    if "!PAYLOAD_NAME!"=="" set "PAYLOAD_NAME=payload.json"
+
+    set "UPLOAD_PAYLOAD=!UPLOAD_DIR!\!PAYLOAD_NAME!"
 
     echo Saving PAYLOAD file...
     echo Payload save path = !UPLOAD_PAYLOAD!
 
     powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "[IO.File]::WriteAllBytes($env:UPLOAD_PAYLOAD,[Convert]::FromBase64String($env:PAYLOAD_FILE))"
+    "[IO.File]::WriteAllBytes($env:UPLOAD_PAYLOAD,[Convert]::FromBase64String($env:PAYLOAD_CONTENT))"
 
     if exist "!UPLOAD_PAYLOAD!" (
         echo PAYLOAD file saved successfully:
@@ -131,29 +34,3 @@ if not "%PAYLOAD_FILE%"=="" (
 ) else (
     echo No PAYLOAD_FILE uploaded. Framework will use testcase payload.
 )
-
-echo ==========================================
-echo Uploaded folder contents
-echo ==========================================
-dir "!UPLOAD_DIR!"
-
-echo ==========================================
-echo Final Execution
-echo ==========================================
-echo PROJECT_NAME = %PROJECT_NAME%
-echo RUN_ARGS     = !RUN_ARGS!
-echo ==========================================
-
-echo Final Gradle Command:
-echo gradlew.bat :%PROJECT_NAME%:test !RUN_ARGS! --no-build-cache
-
-call gradlew.bat :%PROJECT_NAME%:test !RUN_ARGS! --no-build-cache
-
-set BUILD_EXIT_CODE=%ERRORLEVEL%
-
-echo ==========================================
-echo Build Finished
-echo Exit Code = %BUILD_EXIT_CODE%
-echo ==========================================
-
-exit /b %BUILD_EXIT_CODE%
