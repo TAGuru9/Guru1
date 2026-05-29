@@ -16,7 +16,7 @@ echo DATA_FILE=%DATA_FILE%
 echo PAYLOAD_FILE=%PAYLOAD_FILE%
 
 REM ==========================================
-REM Resolve project/module
+REM Resolve project dynamically
 REM ==========================================
 set PROJECT_NAME=
 
@@ -48,11 +48,12 @@ if "%RUN_ENV%"=="" (
 )
 
 REM ==========================================
-REM Base paths
+REM Dynamic workspace paths
 REM ==========================================
 set PROJECT_PATH=%WORKSPACE%\%PROJECT_NAME%
 set RESOURCE_PATH=%PROJECT_PATH%\src\test\resources
 set PAYLOAD_TEMPLATE_PATH=%RESOURCE_PATH%\payloads\templates
+set UPLOAD_DIR=%WORKSPACE%\uploaded
 
 echo PROJECT_NAME=%PROJECT_NAME%
 echo PROJECT_PATH=%PROJECT_PATH%
@@ -60,7 +61,8 @@ echo RESOURCE_PATH=%RESOURCE_PATH%
 echo PAYLOAD_TEMPLATE_PATH=%PAYLOAD_TEMPLATE_PATH%
 
 if not exist "%PROJECT_PATH%" (
-    echo ERROR: Project folder not found: %PROJECT_PATH%
+    echo ERROR: Project folder not found
+    echo %PROJECT_PATH%
     exit /b 1
 )
 
@@ -70,75 +72,102 @@ REM ==========================================
 set RUN_ARGS=-Denv=%RUN_ENV%
 set RUN_ARGS=!RUN_ARGS! -DpayloadBasePath="%RESOURCE_PATH%"
 
+REM ==========================================
+REM Run by IDS
+REM ==========================================
 if not "%IDS%"=="" (
+    echo Running by IDS: %IDS%
     set RUN_ARGS=!RUN_ARGS! -Dids=%IDS%
 ) else (
-    echo WARNING: IDS is empty. Framework may not execute any testcase.
+    echo WARNING: IDS is empty
 )
 
 REM ==========================================
-REM TC file optional
+REM TC FILE OPTIONAL
 REM ==========================================
 if not "%TC_FILE%"=="" (
-    set TC_PATH=%WORKSPACE%\uploaded\%TC_FILE%
 
-    if exist "!TC_PATH!" (
-        echo Using uploaded TC file: !TC_PATH!
-        set RUN_ARGS=!RUN_ARGS! -DtcFile="!TC_PATH!"
+    set UPLOAD_TC=%UPLOAD_DIR%\%TC_FILE%
+
+    if exist "!UPLOAD_TC!" (
+        echo Using uploaded testcase file:
+        echo !UPLOAD_TC!
+
+        set RUN_ARGS=!RUN_ARGS! -DtcFile="!UPLOAD_TC!"
     ) else (
-        echo ERROR: TC file not found: !TC_PATH!
+        echo ERROR: testcase file not found
+        echo !UPLOAD_TC!
         exit /b 1
     )
+
 ) else (
-    echo No TC_FILE uploaded. Running by IDS/framework test cases.
+    echo NO TC_FILE uploaded. Running by IDS/framework test cases.
 )
 
 REM ==========================================
-REM DATA file optional
+REM DATA FILE OPTIONAL
 REM ==========================================
 if not "%DATA_FILE%"=="" (
-    set DATA_PATH=%WORKSPACE%\uploaded\%DATA_FILE%
 
-    if exist "!DATA_PATH!" (
-        echo Using uploaded DATA file: !DATA_PATH!
-        set RUN_ARGS=!RUN_ARGS! -DdataFile="!DATA_PATH!"
+    set UPLOAD_DATA=%UPLOAD_DIR%\%DATA_FILE%
+
+    if exist "!UPLOAD_DATA!" (
+        echo Using uploaded data file:
+        echo !UPLOAD_DATA!
+
+        set RUN_ARGS=!RUN_ARGS! -DdataFile="!UPLOAD_DATA!"
     ) else (
-        echo ERROR: DATA file not found: !DATA_PATH!
+        echo ERROR: data file not found
+        echo !UPLOAD_DATA!
         exit /b 1
     )
+
 ) else (
-    echo No DATA_FILE uploaded.
+    echo NO DATA_FILE uploaded.
 )
 
 REM ==========================================
-REM PAYLOAD file optional
+REM PAYLOAD FILE OPTIONAL
 REM ==========================================
 if not "%PAYLOAD_FILE%"=="" (
 
-    set UPLOAD_PAYLOAD=%WORKSPACE%\uploaded\%PAYLOAD_FILE%
+    set UPLOAD_PAYLOAD=%UPLOAD_DIR%\%PAYLOAD_FILE%
     set FRAMEWORK_PAYLOAD=%PAYLOAD_TEMPLATE_PATH%\%PAYLOAD_FILE%
 
     if exist "!UPLOAD_PAYLOAD!" (
-        echo Using uploaded payload: !UPLOAD_PAYLOAD!
+
+        echo Using uploaded payload:
+        echo !UPLOAD_PAYLOAD!
+
         set RUN_ARGS=!RUN_ARGS! -DpayloadFile="!UPLOAD_PAYLOAD!"
 
     ) else if exist "!FRAMEWORK_PAYLOAD!" (
-        echo Using framework payload: !FRAMEWORK_PAYLOAD!
+
+        echo Using framework payload:
+        echo !FRAMEWORK_PAYLOAD!
+
         set RUN_ARGS=!RUN_ARGS! -DpayloadFile="!FRAMEWORK_PAYLOAD!"
 
     ) else (
-        echo ERROR: Payload file not found.
-        echo Checked uploaded: !UPLOAD_PAYLOAD!
-        echo Checked framework: !FRAMEWORK_PAYLOAD!
+
+        echo ERROR: Payload file not found
+        echo Checked uploaded:
+        echo !UPLOAD_PAYLOAD!
+        echo Checked framework:
+        echo !FRAMEWORK_PAYLOAD!
         exit /b 1
     )
 
 ) else (
-    echo No PAYLOAD_FILE uploaded/selected.
+
+    echo NO PAYLOAD_FILE uploaded/selected.
     echo Framework will resolve testcase payload using payloadBasePath:
     echo !RESOURCE_PATH!
 )
 
+REM ==========================================
+REM FINAL EXECUTION DETAILS
+REM ==========================================
 echo ==========================================
 echo FINAL EXECUTION DETAILS
 echo ==========================================
@@ -147,9 +176,12 @@ echo RUN_ENV=%RUN_ENV%
 echo RUN_ARGS=!RUN_ARGS!
 echo ==========================================
 
+REM ==========================================
+REM EXECUTE FRAMEWORK
+REM ==========================================
 call gradlew.bat clean %PROJECT_NAME%:test ^
  !RUN_ARGS! ^
- -Dargs="framework=%TA_FRAMEWORK%;site=%TA_SITE%;channel=%TA_CHANNEL%;product=%TA_PRODUCT%;application=%TA_APPLICATION%;env=%RUN_ENV%;release=%TA_RELEASE%;testSuiteType=%TA_TESTSUITETYPE%;repoHistory=%TA_REPOSITORY%;gitBranch=%BRANCH%;buildUrl=%BUILD_URL%;executor=%BUILD_USER_ID%;executionSource=Jenkins;vm=%COMPUTERNAME%" ^
+ -Dargs="framework=%TA_FRAMEWORK%;site=%TA_SITE%;channel=%TA_CHANNEL%;product=%TA_PRODUCT%;application=%TA_APPLICATION%;env=%RUN_ENV%;release=%TA_RELEASE%;testSuiteType=%TA_TESTSUITETYPE%;repoHistory=%TA_REPOSITORY%;gitbranch=%BRANCH%;buildUrl=%BUILD_URL%;executor=%BUILD_USER_ID%;executionSource=Jenkins;vm=%COMPUTERNAME%" ^
  --rerun-tasks --no-build-cache --stacktrace
 
 set BUILD_EXIT_CODE=%ERRORLEVEL%
