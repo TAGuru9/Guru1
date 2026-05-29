@@ -1,49 +1,76 @@
-public static Path resolve(String inputPath) {
+package com.acfc.automation.util;
 
-    if (inputPath == null || inputPath.isBlank()) {
-        throw new IllegalArgumentException("Input path is blank");
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+public class FileResolver {
+
+    private FileResolver() {
     }
 
-    String trimmed = inputPath.trim();
+    public static Path resolve(String inputPath) {
 
-    // 1. Direct / absolute path (uploaded payload or full path)
-    Path direct = Paths.get(trimmed);
+        if (inputPath == null || inputPath.isBlank()) {
+            throw new IllegalArgumentException("Input path is blank");
+        }
 
-    if (Files.exists(direct)) {
-        return direct.toAbsolutePath().normalize();
-    }
+        String trimmed = inputPath.trim();
 
-    // 2. Jenkins payloadBasePath
-    String payloadBasePath = System.getProperty("payloadBasePath");
+        // 1. Direct absolute or relative path
+        Path direct = Paths.get(trimmed);
+        if (Files.exists(direct)) {
+            return direct.toAbsolutePath().normalize();
+        }
 
-    if (payloadBasePath != null && !payloadBasePath.isBlank()) {
+        // 2. Jenkins payloadBasePath
+        String payloadBasePath = System.getProperty("payloadBasePath");
+        if (payloadBasePath != null && !payloadBasePath.isBlank()) {
+            Path jenkinsPath = Paths.get(payloadBasePath)
+                    .resolve(trimmed)
+                    .normalize();
 
-        Path jenkinsPath = Paths.get(payloadBasePath)
+            if (Files.exists(jenkinsPath)) {
+                return jenkinsPath.toAbsolutePath().normalize();
+            }
+        }
+
+        // 3. IDE run from inside module folder
+        Path ideModulePath = Paths.get(
+                        System.getProperty("user.dir"),
+                        "src", "test", "resources"
+                )
                 .resolve(trimmed)
                 .normalize();
 
-        if (Files.exists(jenkinsPath)) {
-            return jenkinsPath.toAbsolutePath().normalize();
+        if (Files.exists(ideModulePath)) {
+            return ideModulePath.toAbsolutePath().normalize();
         }
+
+        // 4. IDE run from root repo with -Dproject=project-cdr
+        String projectName = System.getProperty("project");
+        Path ideProjectPath = null;
+
+        if (projectName != null && !projectName.isBlank()) {
+            ideProjectPath = Paths.get(
+                            System.getProperty("user.dir"),
+                            projectName,
+                            "src", "test", "resources"
+                    )
+                    .resolve(trimmed)
+                    .normalize();
+
+            if (Files.exists(ideProjectPath)) {
+                return ideProjectPath.toAbsolutePath().normalize();
+            }
+        }
+
+        throw new RuntimeException(
+                "File not found. Checked paths for: " + inputPath
+                        + "\nDirect: " + direct.toAbsolutePath().normalize()
+                        + "\nJenkins: " + payloadBasePath
+                        + "\nIDE Module: " + ideModulePath
+                        + "\nIDE Project: " + ideProjectPath
+        );
     }
-
-    // 3. IDE run (project-cdr / project-memberEligibility)
-    Path idePath = Paths.get(
-            System.getProperty("user.dir"),
-            "src",
-            "test",
-            "resources"
-    ).resolve(trimmed).normalize();
-
-    if (Files.exists(idePath)) {
-        return idePath.toAbsolutePath().normalize();
-    }
-
-    throw new RuntimeException(
-            "File not found. Checked paths for: "
-                    + inputPath
-                    + "\nDirect: " + direct.toAbsolutePath()
-                    + "\nJenkins: " + payloadBasePath
-                    + "\nIDE: " + idePath
-    );
 }
