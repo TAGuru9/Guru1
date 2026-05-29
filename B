@@ -7,7 +7,8 @@ echo ==========================================
 echo Jenkins Runtime Inputs
 echo ==========================================
 echo WORKSPACE=%WORKSPACE%
-echo TA_PROJECT=%TA_PROJECT%
+echo TA_APPLICATION=%TA_APPLICATION%
+echo TA_ENVTYPE=%TA_ENVTYPE%
 echo ENVTYPE=%ENVTYPE%
 echo IDS=%IDS%
 echo TC_FILE=%TC_FILE%
@@ -15,33 +16,58 @@ echo DATA_FILE=%DATA_FILE%
 echo PAYLOAD_FILE=%PAYLOAD_FILE%
 
 REM ==========================================
-REM Validate Project
-REM Example:
-REM TA_PROJECT=project-cdr
-REM TA_PROJECT=project-member
+REM Resolve project/module dynamically
 REM ==========================================
-if "%TA_PROJECT%"=="" (
-    echo ERROR: TA_PROJECT is required
+set PROJECT_NAME=
+
+if /I "%TA_APPLICATION%"=="cdr" (
+    set PROJECT_NAME=project-cdr
+)
+
+if /I "%TA_APPLICATION%"=="membereligibility" (
+    set PROJECT_NAME=project-membereligibility
+)
+
+if "%PROJECT_NAME%"=="" (
+    echo ERROR: Invalid TA_APPLICATION=%TA_APPLICATION%
     exit /b 1
 )
 
-set PROJECT_NAME=%TA_PROJECT%
+REM ==========================================
+REM Resolve environment
+REM ==========================================
+set RUN_ENV=%ENVTYPE%
+
+if "%RUN_ENV%"=="" (
+    set RUN_ENV=%TA_ENVTYPE%
+)
+
+if "%RUN_ENV%"=="" (
+    echo ERROR: ENVTYPE or TA_ENVTYPE is required
+    exit /b 1
+)
 
 REM ==========================================
-REM Base Paths
+REM Base paths
 REM ==========================================
 set PROJECT_PATH=%WORKSPACE%\%PROJECT_NAME%
 set RESOURCE_PATH=%PROJECT_PATH%\src\test\resources
 set PAYLOAD_TEMPLATE_PATH=%RESOURCE_PATH%\payloads\templates
 
+echo PROJECT_NAME=%PROJECT_NAME%
 echo PROJECT_PATH=%PROJECT_PATH%
 echo RESOURCE_PATH=%RESOURCE_PATH%
 echo PAYLOAD_TEMPLATE_PATH=%PAYLOAD_TEMPLATE_PATH%
 
+if not exist "%PROJECT_PATH%" (
+    echo ERROR: Project folder not found: %PROJECT_PATH%
+    exit /b 1
+)
+
 REM ==========================================
-REM Base Runtime Args
+REM Base runtime args
 REM ==========================================
-set RUN_ARGS=-Denv=%ENVTYPE%
+set RUN_ARGS=-Denv=%RUN_ENV%
 set RUN_ARGS=!RUN_ARGS! -DpayloadBasePath="%RESOURCE_PATH%"
 
 if not "%IDS%"=="" (
@@ -49,48 +75,43 @@ if not "%IDS%"=="" (
 )
 
 REM ==========================================
-REM TC FILE (Optional)
+REM TC file optional
 REM ==========================================
 if not "%TC_FILE%"=="" (
-
     set TC_PATH=%WORKSPACE%\uploaded\%TC_FILE%
 
     if exist "!TC_PATH!" (
-        echo Using uploaded TC file:
-        echo !TC_PATH!
-
+        echo Using uploaded TC file: !TC_PATH!
         set RUN_ARGS=!RUN_ARGS! -DtcFile="!TC_PATH!"
     ) else (
-        echo ERROR: TC file not found:
-        echo !TC_PATH!
+        echo ERROR: TC file not found: !TC_PATH!
         exit /b 1
     )
+) else (
+    echo No TC_FILE uploaded. Running by IDS/framework test cases.
 )
 
 REM ==========================================
-REM DATA FILE (Optional)
+REM DATA file optional
 REM ==========================================
 if not "%DATA_FILE%"=="" (
-
     set DATA_PATH=%WORKSPACE%\uploaded\%DATA_FILE%
 
     if exist "!DATA_PATH!" (
-        echo Using uploaded DATA file:
-        echo !DATA_PATH!
-
+        echo Using uploaded DATA file: !DATA_PATH!
         set RUN_ARGS=!RUN_ARGS! -DdataFile="!DATA_PATH!"
     ) else (
-        echo ERROR: DATA file not found:
-        echo !DATA_PATH!
+        echo ERROR: DATA file not found: !DATA_PATH!
         exit /b 1
     )
+) else (
+    echo No DATA_FILE uploaded.
 )
 
 REM ==========================================
-REM PAYLOAD FILE (Optional)
-REM 1. Uploaded payload
-REM 2. Framework payload template
-REM 3. No payload -> framework testcase JSON
+REM PAYLOAD file optional
+REM - If user uploads/selects payload, use it
+REM - If no payload, framework uses testcase JSON with payloadBasePath
 REM ==========================================
 if not "%PAYLOAD_FILE%"=="" (
 
@@ -98,43 +119,37 @@ if not "%PAYLOAD_FILE%"=="" (
     set FRAMEWORK_PAYLOAD=%PAYLOAD_TEMPLATE_PATH%\%PAYLOAD_FILE%
 
     if exist "!UPLOAD_PAYLOAD!" (
-
-        echo Using uploaded payload:
-        echo !UPLOAD_PAYLOAD!
-
+        echo Using uploaded payload: !UPLOAD_PAYLOAD!
         set RUN_ARGS=!RUN_ARGS! -DpayloadFile="!UPLOAD_PAYLOAD!"
 
     ) else if exist "!FRAMEWORK_PAYLOAD!" (
-
-        echo Using framework payload:
-        echo !FRAMEWORK_PAYLOAD!
-
+        echo Using framework payload: !FRAMEWORK_PAYLOAD!
         set RUN_ARGS=!RUN_ARGS! -DpayloadFile="!FRAMEWORK_PAYLOAD!"
 
     ) else (
-
-        echo ERROR: Payload file not found
-        echo Checked:
-        echo !UPLOAD_PAYLOAD!
-        echo !FRAMEWORK_PAYLOAD!
+        echo ERROR: Payload file not found.
+        echo Checked uploaded: !UPLOAD_PAYLOAD!
+        echo Checked framework: !FRAMEWORK_PAYLOAD!
         exit /b 1
     )
 
 ) else (
-
-    echo No payload uploaded.
-    echo Framework will use testcase JSON payload path.
-    echo Base path:
+    echo No PAYLOAD_FILE uploaded/selected.
+    echo Framework will resolve testcase payload using payloadBasePath:
     echo !RESOURCE_PATH!
 )
 
 echo ==========================================
-echo FINAL EXECUTION
+echo FINAL EXECUTION DETAILS
 echo ==========================================
-echo gradlew.bat clean %PROJECT_NAME%:test !RUN_ARGS!
+echo PROJECT_NAME=%PROJECT_NAME%
+echo RUN_ENV=%RUN_ENV%
+echo RUN_ARGS=!RUN_ARGS!
+echo ==========================================
 
 call gradlew.bat clean %PROJECT_NAME%:test ^
  !RUN_ARGS! ^
+ -Dargs="framework=%TA_FRAMEWORK%;site=%TA_SITE%;channel=%TA_CHANNEL%;product=%TA_PRODUCT%;application=%TA_APPLICATION%;env=%RUN_ENV%;release=%TA_RELEASE%;testSuiteType=%TA_TESTSUITETYPE%;repoHistory=%TA_REPOSITORY%;gitBranch=%BRANCH%;buildUrl=%BUILD_URL%;executor=%BUILD_USER_ID%;executionSource=Jenkins;vm=%COMPUTERNAME%" ^
  --rerun-tasks --no-build-cache --stacktrace
 
 exit /b %ERRORLEVEL%
