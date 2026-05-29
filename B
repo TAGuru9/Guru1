@@ -16,6 +16,7 @@ echo TC_FILE=%TC_FILE%
 echo DATA_FILE=%DATA_FILE%
 echo PAYLOAD_FILE=%PAYLOAD_FILE%
 
+REM Resolve project name
 set PROJECT_NAME=
 
 if /I "%TA_APPLICATION%"=="cdr" set PROJECT_NAME=project-cdr
@@ -26,35 +27,48 @@ if "%PROJECT_NAME%"=="" (
     exit /b 1
 )
 
+REM Resolve environment
 set RUN_ENV=%ENVTYPE%
 if "%RUN_ENV%"=="" set RUN_ENV=%TA_ENVTYPE%
 
+REM Correct project paths
 set PROJECT_PATH=%WORKSPACE%\%PROJECT_NAME%
 set RESOURCE_PATH=%PROJECT_PATH%\src\test\resources
 set PAYLOAD_TEMPLATE_PATH=%RESOURCE_PATH%\payloads\templates
 set UPLOAD_DIR=%WORKSPACE%\uploaded
 
-set RUN_ARGS=-Denv=%RUN_ENV%
-set RUN_ARGS=!RUN_ARGS! -DpayloadBasePath="%RESOURCE_PATH%"
+echo PROJECT_NAME=%PROJECT_NAME%
+echo PROJECT_PATH=%PROJECT_PATH%
+echo RESOURCE_PATH=%RESOURCE_PATH%
+echo PAYLOAD_TEMPLATE_PATH=%PAYLOAD_TEMPLATE_PATH%
 
+REM Build runtime args
+set RUN_ARGS=-Denv=%RUN_ENV%
+set RUN_ARGS=!RUN_ARGS! -DpayloadBasePath="!RESOURCE_PATH!"
+
+REM TC ID handling
 set RUN_IDS=%TC_IDS%
 if "%RUN_IDS%"=="" set RUN_IDS=%IDS%
 
 if not "%RUN_IDS%"=="" (
+    echo Running by TC IDS: %RUN_IDS%
     set RUN_ARGS=!RUN_ARGS! -Dids=%RUN_IDS%
 ) else (
     echo ERROR: TC_IDS or IDS is empty
     exit /b 1
 )
 
+REM Optional TC file
 if not "%TC_FILE%"=="" (
     set RUN_ARGS=!RUN_ARGS! -DtcFile="%UPLOAD_DIR%\%TC_FILE%"
 )
 
+REM Optional DATA file
 if not "%DATA_FILE%"=="" (
     set RUN_ARGS=!RUN_ARGS! -DdataFile="%UPLOAD_DIR%\%DATA_FILE%"
 )
 
+REM Optional PAYLOAD file
 if not "%PAYLOAD_FILE%"=="" (
     set UPLOAD_PAYLOAD=%UPLOAD_DIR%\%PAYLOAD_FILE%
     set FRAMEWORK_PAYLOAD=%PAYLOAD_TEMPLATE_PATH%\%PAYLOAD_FILE%
@@ -64,7 +78,7 @@ if not "%PAYLOAD_FILE%"=="" (
         echo !UPLOAD_PAYLOAD!
         set RUN_ARGS=!RUN_ARGS! -DpayloadFile="!UPLOAD_PAYLOAD!"
     ) else (
-        echo Using Jenkins framework payload path:
+        echo Using framework payload:
         echo !FRAMEWORK_PAYLOAD!
         set RUN_ARGS=!RUN_ARGS! -DpayloadFile="!FRAMEWORK_PAYLOAD!"
     )
