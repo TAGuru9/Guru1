@@ -1,64 +1,21 @@
-package com.acfc.automation.util;
+// SSL certificate handling
+if ("true".equalsIgnoreCase(ConfigManager.getProperty("ssl.enabled"))) {
 
-import com.acfc.automation.config.FrameworkConfig;
-import io.restassured.config.RestAssuredConfig;
-import io.restassured.config.SSLConfig;
+    String keyStorePath = ConfigManager.getProperty("ssl.keystore.path");
+    String keyStorePassword = ConfigManager.getProperty("ssl.keystore.password");
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
+    System.out.println("SSL ENABLED = true");
+    System.out.println("SSL KEYSTORE PATH = " + keyStorePath);
 
-public class SSLManager {
-
-    public static RestAssuredConfig getSSLConfig() {
-        try {
-            String path = FrameworkConfig.getProperty("ssl.keystore.path");
-            String password = FrameworkConfig.getProperty("ssl.keystore.password");
-            String type = FrameworkConfig.getProperty("ssl.keystore.type");
-
-            System.out.println("SSL Keystore Path From Config: " + path);
-            System.out.println("SSL Keystore Type: " + type);
-
-            String actualPath = resolveKeystorePath(path);
-
-            System.out.println("Resolved SSL Keystore Path: " + actualPath);
-
-            return RestAssuredConfig.config()
+    request.config(
+            RestAssuredConfig.config()
                     .sslConfig(
                             SSLConfig.sslConfig()
-                                    .keyStore(actualPath, password)
-                                    .keyStoreType(type)
-                    );
+                                    .keyStore(keyStorePath, keyStorePassword)
+                                    .keystoreType("JKS")
+                                    .allowAllHostnames()
+                    )
+    );
 
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to load SSL certificate", e);
-        }
-    }
-
-    private static String resolveKeystorePath(String path) throws Exception {
-
-        if (path.startsWith("classpath:")) {
-
-            String resourcePath = path.replace("classpath:", "");
-
-            InputStream inputStream = Thread.currentThread()
-                    .getContextClassLoader()
-                    .getResourceAsStream(resourcePath);
-
-            if (inputStream == null) {
-                throw new RuntimeException("Keystore not found in classpath: " + resourcePath);
-            }
-
-            File tempFile = File.createTempFile("ssl-keystore-", ".jks");
-            tempFile.deleteOnExit();
-
-            try (FileOutputStream outputStream = new FileOutputStream(tempFile)) {
-                inputStream.transferTo(outputStream);
-            }
-
-            return tempFile.getAbsolutePath();
-        }
-
-        return path;
-    }
+    System.out.println("SSL config applied");
 }
