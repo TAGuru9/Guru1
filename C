@@ -1,3 +1,5 @@
+RequestSpecification request = RestAssured.given();
+
 // SSL certificate handling
 if ("true".equalsIgnoreCase(FrameworkConfig.getProperty("ssl.enabled"))) {
 
@@ -11,15 +13,15 @@ if ("true".equalsIgnoreCase(FrameworkConfig.getProperty("ssl.enabled"))) {
     System.setProperty("javax.net.ssl.keyStorePassword", keyStorePassword);
     System.setProperty("javax.net.ssl.keyStoreType", "JKS");
 
-    request.config(
-            RestAssuredConfig.config()
-                    .sslConfig(
-                            SSLConfig.sslConfig()
-                                    .keyStore(keyStorePath, keyStorePassword)
-                                    .keystoreType("JKS")
-                                    .allowAllHostnames()
-                    )
-    );
+    RestAssured.config = RestAssuredConfig.config()
+            .sslConfig(
+                    SSLConfig.sslConfig()
+                            .keyStore(keyStorePath, keyStorePassword)
+                            .keystoreType("JKS")
+                            .allowAllHostnames()
+            );
+
+    request = RestAssured.given().config(RestAssured.config);
 
     System.out.println("SSL config applied");
 }
