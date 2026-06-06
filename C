@@ -1,2 +1,19 @@
-implementation 'org.apache.httpcomponents:httpclient:4.5.14'
-implementation 'org.apache.httpcomponents:httpcore:4.4.16'
+RequestSpecification request = RestAssured.given();
+
+if (Boolean.TRUE.equals(testCase.getSslEnabled())) {
+    request.config(SSLManager.getSSLConfig());
+    System.out.println("SSL certificate configuration applied");
+    extentTest.info("SSL certificate configuration applied");
+} else {
+    request.relaxedHTTPSValidation();
+}
+
+// OAuth2 Token handling
+if ("OAUTH2".equalsIgnoreCase(testCase.getAuthType())) {
+    String token = TokenManager.getToken(testCase);
+
+    request.header("Authorization", "Bearer " + token);
+
+    extentTest.info("OAuth2 Authorization header added");
+    System.out.println("OAuth2 Authorization header added");
+}
