@@ -1,19 +1,58 @@
-RequestSpecification request = RestAssured.given();
+package com.acfc.automation.util;
 
-if (Boolean.TRUE.equals(testCase.getSslEnabled())) {
-    request.config(SSLManager.getSSLConfig());
-    System.out.println("SSL certificate configuration applied");
-    extentTest.info("SSL certificate configuration applied");
-} else {
-    request.relaxedHTTPSValidation();
-}
+import com.acfc.automation.config.FrameworkConfig;
+import io.restassured.config.RestAssuredConfig;
+import io.restassured.config.SSLConfig;
+import org.apache.http.conn.ssl.SSLSocketFactory;
+import org.apache.http.ssl.SSLContexts;
 
-// OAuth2 Token handling
-if ("OAUTH2".equalsIgnoreCase(testCase.getAuthType())) {
-    String token = TokenManager.getToken(testCase);
+import javax.net.ssl.SSLContext;
+import java.io.InputStream;
+import java.security.KeyStore;
 
-    request.header("Authorization", "Bearer " + token);
+public class SSLManager {
 
-    extentTest.info("OAuth2 Authorization header added");
-    System.out.println("OAuth2 Authorization header added");
+    public static RestAssuredConfig getSSLConfig() {
+        try {
+            String path = FrameworkConfig.getProperty("ssl.keystore.path");
+            String password = FrameworkConfig.getProperty("ssl.keystore.password");
+            String type = FrameworkConfig.getProperty("ssl.keystore.type");
+
+            String resourcePath = path.replace("classpath:", "");
+
+            InputStream inputStream = Thread.currentThread()
+                    .getContextClassLoader()
+                    .getResourceAsStream(resourcePath);
+
+            if (inputStream == null) {
+                throw new RuntimeException("JKS not found: " + resourcePath);
+            }
+
+            KeyStore keyStore = KeyStore.getInstance(type);
+            keyStore.load(inputStream, password.toCharArray());
+
+            SSLContext sslContext = SSLContexts.custom()
+                    .loadKeyMaterial(
+                            keyStore,
+                            password.toCharArray(),
+                            (aliases, socket) -> "soapui"
+                    )
+                    .build();
+
+            SSLSocketFactory socketFactory =
+                    new SSLSocketFactory(
+                            sslContext,
+                            SSLSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER
+                    );
+
+            return RestAssuredConfig.config()
+                    .sslConfig(
+                            SSLConfig.sslConfig()
+                                    .sslSocketFactory(socketFactory)
+                    );
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load SSL certificate", e);
+        }
+    }
 }
