@@ -1,9 +1,1 @@
-RequestSpecification request = RestAssured.given();
-
-if (Boolean.TRUE.equals(testCase.getSslEnabled())) {
-    request.config(SSLManager.getSSLConfig());
-    System.out.println("SSL certificate configuration applied");
-    extentTest.info("SSL certificate configuration applied");
-} else {
-    request.relaxedHTTPSValidation();
-}
+keytool -list -v -keystore project-cdr/src/test/resources/certificates/soapui_APIJEE.jks | Select-String "Alias name","Entry type"
