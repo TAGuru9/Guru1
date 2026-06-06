@@ -1,11 +1,15 @@
 // SSL certificate handling
-if ("true".equalsIgnoreCase(ConfigManager.getProperty("ssl.enabled"))) {
+if ("true".equalsIgnoreCase(FrameworkConfig.getProperty("ssl.enabled"))) {
 
-    String keyStorePath = ConfigManager.getProperty("ssl.keystore.path");
-    String keyStorePassword = ConfigManager.getProperty("ssl.keystore.password");
+    String keyStorePath = FrameworkConfig.getProperty("ssl.keystore.path");
+    String keyStorePassword = FrameworkConfig.getProperty("ssl.keystore.password");
 
     System.out.println("SSL ENABLED = true");
     System.out.println("SSL KEYSTORE PATH = " + keyStorePath);
+
+    System.setProperty("javax.net.ssl.keyStore", keyStorePath);
+    System.setProperty("javax.net.ssl.keyStorePassword", keyStorePassword);
+    System.setProperty("javax.net.ssl.keyStoreType", "JKS");
 
     request.config(
             RestAssuredConfig.config()
