@@ -1,1 +1,2 @@
-keytool -list -v -keystore project-cdr/src/test/resources/certificates/soapui_APIJEE.jks | Select-String "Alias name","Entry type"
+implementation 'org.apache.httpcomponents:httpclient:4.5.14'
+implementation 'org.apache.httpcomponents:httpcore:4.4.16'
