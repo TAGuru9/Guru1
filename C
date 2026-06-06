@@ -1,27 +1,9 @@
-RequestSpecification request = RestAssured.given();
+test {
+    useJUnitPlatform()
 
-// SSL certificate handling
-if ("true".equalsIgnoreCase(FrameworkConfig.getProperty("ssl.enabled"))) {
+    systemProperty "javax.net.ssl.keyStore", "${projectDir}/src/test/resources/certificates/soapui_APIJEE.jks"
+    systemProperty "javax.net.ssl.keyStorePassword", "soapui"
+    systemProperty "javax.net.ssl.keyStoreType", "JKS"
 
-    String keyStorePath = FrameworkConfig.getProperty("ssl.keystore.path");
-    String keyStorePassword = FrameworkConfig.getProperty("ssl.keystore.password");
-
-    System.out.println("SSL ENABLED = true");
-    System.out.println("SSL KEYSTORE PATH = " + keyStorePath);
-
-    System.setProperty("javax.net.ssl.keyStore", keyStorePath);
-    System.setProperty("javax.net.ssl.keyStorePassword", keyStorePassword);
-    System.setProperty("javax.net.ssl.keyStoreType", "JKS");
-
-    RestAssured.config = RestAssuredConfig.config()
-            .sslConfig(
-                    SSLConfig.sslConfig()
-                            .keyStore(keyStorePath, keyStorePassword)
-                            .keystoreType("JKS")
-                            .allowAllHostnames()
-            );
-
-    request = RestAssured.given().config(RestAssured.config);
-
-    System.out.println("SSL config applied");
+    systemProperty "javax.net.debug", "ssl,handshake"
 }
