@@ -1,0 +1,52 @@
+package com.acfc.automation.util;
+
+import com.acfc.automation.config.FrameworkConfig;
+import io.restassured.config.SSLConfig;
+import org.apache.http.ssl.SSLContexts;
+
+import javax.net.ssl.SSLContext;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.security.KeyStore;
+
+public class SSLManager {
+
+    public static SSLConfig getSSLConfig() {
+        try {
+            String path = FrameworkConfig.getProperty("ssl.keystore.path");
+            String password = FrameworkConfig.getProperty("ssl.keystore.password");
+            String type = FrameworkConfig.getProperty("ssl.keystore.type");
+
+            KeyStore keyStore = KeyStore.getInstance(type);
+
+            try (InputStream inputStream = getInputStream(path)) {
+                if (inputStream == null) {
+                    throw new RuntimeException("SSL keystore not found: " + path);
+                }
+
+                keyStore.load(inputStream, password.toCharArray());
+            }
+
+            SSLContext sslContext = SSLContexts.custom()
+                    .loadKeyMaterial(keyStore, password.toCharArray())
+                    .build();
+
+            return SSLConfig.sslConfig()
+                    .sslSocketFactory(sslContext.getSocketFactory());
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load SSL certificate", e);
+        }
+    }
+
+    private static InputStream getInputStream(String path) throws Exception {
+        if (path.startsWith("classpath:")) {
+            String resourcePath = path.replace("classpath:", "");
+            return Thread.currentThread()
+                    .getContextClassLoader()
+                    .getResourceAsStream(resourcePath);
+        }
+
+        return new FileInputStream(path);
+    }
+}
