@@ -1,5 +1,31 @@
-keytool -importcert ^
- -alias q1-apg-ap-int-2wayapi ^
- -file q1-apg-ap-int-2wayapi.cer ^
- -keystore soapui_APIJEE.jks ^
- -storepass soapui
+private static KeyStore loadStore(String path, String password, String type) throws Exception {
+
+    InputStream inputStream;
+
+    if (path.startsWith("classpath:")) {
+
+        String resourcePath = path.replace("classpath:", "");
+
+        inputStream = Thread.currentThread()
+                .getContextClassLoader()
+                .getResourceAsStream(resourcePath);
+
+        if (inputStream == null) {
+            throw new RuntimeException("JKS not found in classpath: " + resourcePath);
+        }
+
+    } else {
+
+        inputStream = new java.io.FileInputStream(path);
+
+        if (inputStream == null) {
+            throw new RuntimeException("JKS not found in file path: " + path);
+        }
+    }
+
+    KeyStore store = KeyStore.getInstance(type);
+    store.load(inputStream, password.toCharArray());
+    inputStream.close();
+
+    return store;
+}
