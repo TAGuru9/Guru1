@@ -1,31 +1,17 @@
-private static KeyStore loadStore(String path, String password, String type) throws Exception {
+.loadKeyMaterial(
+        keyStore,
+        keyStorePassword.toCharArray(),
+        (aliases, socket) -> {
+            System.out.println("Available client cert aliases from SSL handshake: " + aliases.keySet());
+            System.out.println("Configured ssl.key.alias: " + keyAlias);
 
-    InputStream inputStream;
+            if (keyAlias != null && aliases.containsKey(keyAlias)) {
+                System.out.println("Using configured SSL alias: " + keyAlias);
+                return keyAlias;
+            }
 
-    if (path.startsWith("classpath:")) {
-
-        String resourcePath = path.replace("classpath:", "");
-
-        inputStream = Thread.currentThread()
-                .getContextClassLoader()
-                .getResourceAsStream(resourcePath);
-
-        if (inputStream == null) {
-            throw new RuntimeException("JKS not found in classpath: " + resourcePath);
+            String firstAlias = aliases.keySet().iterator().next();
+            System.out.println("Configured alias not found. Using first SSL alias: " + firstAlias);
+            return firstAlias;
         }
-
-    } else {
-
-        inputStream = new java.io.FileInputStream(path);
-
-        if (inputStream == null) {
-            throw new RuntimeException("JKS not found in file path: " + path);
-        }
-    }
-
-    KeyStore store = KeyStore.getInstance(type);
-    store.load(inputStream, password.toCharArray());
-    inputStream.close();
-
-    return store;
-}
+)
