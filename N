@@ -1,0 +1,17 @@
+Hi Vendor Managers,
+
+I would like to emphasize the importance of engaging the Automation Manager before initiating the development of any new tools, frameworks, or automation-related solutions.
+
+Recently, we have seen key resources being diverted from project deliverables to focus on custom tool development that does not align with our established automation processes and CI/CD strategy. This has resulted in additional rework and reinvestment efforts to integrate or replace these solutions.
+
+To ensure effective utilization of resources and alignment with enterprise standards, any automation requirements or ideas for new tools should be communicated to me prior to the start of development. Early collaboration will help us evaluate existing capabilities, avoid duplicate efforts, and ensure that proposed solutions are scalable, maintainable, and compatible with our automation ecosystem.
+
+Going forward, please ensure that no automation tools or frameworks are developed without prior discussion and review with the Automation Manager. This will help us:
+
+* Keep resources focused on project priorities and committed deliverables.
+* Prevent unnecessary custom development and technical debt.
+* Leverage existing frameworks and reusable components.
+* Maintain consistency with enterprise automation and CI/CD standards.
+* Reduce future support and maintenance efforts.
+
+Thank you for your cooperation and partnership. I appreciate your support in ensuring our automation efforts remain aligned and efficient.
