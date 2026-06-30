@@ -4,26 +4,37 @@ boolean sslEnabled = Boolean.TRUE.equals(testCase.getSslEnabled());
 
 if (sslEnabled) {
     request.config(SSLManager.getSSLConfig());
+
     System.out.println("SSL certificate configuration applied");
     extentTest.info("SSL certificate configuration applied");
 } else {
     request.relaxedHTTPSValidation();
 }
 
+/*
+ * Add all headers from testcase first.
+ */
 Map<String, String> headers = testCase.getHeaders();
-if (headers != null && !headers.isEmpty()) {
-    for (Map.Entry<String, String> header : headers.entrySet()) {
-        if (header.getKey() != null && header.getValue() != null) {
-            request.header(header.getKey(), resolveInlineProperties(header.getValue()));
+
+if (headers != null) {
+    headers.forEach((key, value) -> {
+        if (key != null && value != null) {
+            request.header(key, resolveInlineProperties(value));
         }
-    }
+    });
 }
 
-String authType = safe(testCase.getAuthType()).trim().toUpperCase();
+/*
+ * OAuth2 if required
+ */
+String authType = safe(testCase.getAuthType()).toUpperCase();
 
 if ("OAUTH2".equals(authType)) {
+
     String token = TokenManager.getToken(testCase);
+
     request.header("Authorization", "Bearer " + token);
+
     System.out.println("OAuth2 Authorization header added");
     extentTest.info("OAuth2 Authorization header added");
 }
