@@ -1,162 +1,32 @@
-package com.acfc.automation.util;
+RequestSpecification request = RestAssured.given();
 
-import io.restassured.config.RestAssuredConfig;
-import io.restassured.config.SSLConfig;
-import org.apache.http.conn.ssl.SSLSocketFactory;
-import org.apache.http.ssl.SSLContextBuilder;
+boolean sslEnabled = Boolean.TRUE.equals(testCase.getSslEnabled());
 
-import javax.net.ssl.SSLContext;
-import java.io.FileInputStream;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.KeyStore;
-import java.util.Enumeration;
+if (sslEnabled) {
+    request.config(SSLManager.getSSLConfig());
+    System.out.println("SSL certificate configuration applied");
+    extentTest.info("SSL certificate configuration applied");
+} else {
+    request.relaxedHTTPSValidation();
+}
 
-public class SSLManager {
-
-    public static RestAssuredConfig getSSLConfig() {
-        try {
-            String keyStorePath = required("ssl.keystore.path");
-            String keyStorePassword = required("ssl.keystore.password");
-            String keyStoreType = defaultValue(FrameworkConfig.getProperty("ssl.keystore.type"), "JKS");
-            String keyAlias = FrameworkConfig.getProperty("ssl.key.alias");
-
-            String trustStorePath = FrameworkConfig.getProperty("ssl.truststore.path");
-            String trustStorePassword = FrameworkConfig.getProperty("ssl.truststore.password");
-            String trustStoreType = defaultValue(FrameworkConfig.getProperty("ssl.truststore.type"), keyStoreType);
-
-            System.out.println("========== SSL CONFIG ==========");
-            System.out.println("Keystore path  : " + keyStorePath);
-            System.out.println("Keystore type  : " + keyStoreType);
-            System.out.println("Key alias      : " + keyAlias);
-            System.out.println("Truststore path: " + trustStorePath);
-            System.out.println("Truststore type: " + trustStoreType);
-            System.out.println("================================");
-
-            KeyStore keyStore = loadStore(keyStorePath, keyStorePassword, keyStoreType);
-            printAliases(keyStore);
-
-            String finalAlias = resolveAlias(keyStore, keyAlias);
-
-            SSLContextBuilder builder = SSLContextBuilder.create()
-                    .loadKeyMaterial(
-                            keyStore,
-                            keyStorePassword.toCharArray(),
-                            (aliases, socket) -> {
-                                System.out.println("Available client cert aliases: " + aliases.keySet());
-                                System.out.println("Using SSL alias: " + finalAlias);
-                                return finalAlias;
-                            }
-                    );
-
-            if (trustStorePath != null && !trustStorePath.trim().isEmpty()) {
-                KeyStore trustStore = loadStore(trustStorePath, trustStorePassword, trustStoreType);
-                builder.loadTrustMaterial(trustStore, null);
-            } else {
-                builder.loadTrustMaterial(keyStore, null);
-            }
-
-            SSLContext sslContext = builder.build();
-
-            SSLSocketFactory socketFactory = new SSLSocketFactory(
-                    sslContext,
-                    SSLSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER
-            );
-
-            return RestAssuredConfig.config()
-                    .sslConfig(
-                            SSLConfig.sslConfig()
-                                    .sslSocketFactory(socketFactory)
-                    );
-
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to Load SSL certificate: " + e.getMessage(), e);
+Map<String, String> headers = testCase.getHeaders();
+if (headers != null && !headers.isEmpty()) {
+    for (Map.Entry<String, String> header : headers.entrySet()) {
+        if (header.getKey() != null && header.getValue() != null) {
+            request.header(header.getKey(), resolveInlineProperties(header.getValue()));
         }
-    }
-
-    private static KeyStore loadStore(String path, String password, String type) throws Exception {
-        if (path == null || path.trim().isEmpty()) {
-            throw new RuntimeException("SSL path is empty");
-        }
-
-        if (password == null) {
-            password = "";
-        }
-
-        InputStream inputStream;
-
-        if (path.startsWith("classpath:")) {
-            String resourcePath = path.replace("classpath:", "").trim();
-
-            inputStream = Thread.currentThread()
-                    .getContextClassLoader()
-                    .getResourceAsStream(resourcePath);
-
-            if (inputStream == null) {
-                throw new RuntimeException("JKS not found in classpath: " + resourcePath);
-            }
-
-        } else {
-            Path filePath = Path.of(path);
-
-            if (!Files.exists(filePath)) {
-                throw new RuntimeException("JKS file not found: " + filePath.toAbsolutePath());
-            }
-
-            inputStream = new FileInputStream(filePath.toFile());
-        }
-
-        KeyStore store = KeyStore.getInstance(type);
-        store.load(inputStream, password.toCharArray());
-        inputStream.close();
-
-        return store;
-    }
-
-    private static String resolveAlias(KeyStore keyStore, String configuredAlias) throws Exception {
-        if (configuredAlias != null && !configuredAlias.trim().isEmpty()) {
-            if (keyStore.containsAlias(configuredAlias)) {
-                return configuredAlias;
-            }
-            throw new RuntimeException("Configured ssl.key.alias not found in JKS: " + configuredAlias);
-        }
-
-        Enumeration<String> aliases = keyStore.aliases();
-
-        while (aliases.hasMoreElements()) {
-            String alias = aliases.nextElement();
-            if (keyStore.isKeyEntry(alias)) {
-                return alias;
-            }
-        }
-
-        throw new RuntimeException("No private key alias found in JKS");
-    }
-
-    private static void printAliases(KeyStore keyStore) throws Exception {
-        Enumeration<String> aliases = keyStore.aliases();
-
-        while (aliases.hasMoreElements()) {
-            String alias = aliases.nextElement();
-            System.out.println("JKS alias: " + alias + " | isKeyEntry=" + keyStore.isKeyEntry(alias));
-        }
-    }
-
-    private static String required(String key) {
-        String value = FrameworkConfig.getProperty(key);
-
-        if (value == null || value.trim().isEmpty()) {
-            throw new RuntimeException("Missing required property: " + key);
-        }
-
-        return value.trim();
-    }
-
-    private static String defaultValue(String value, String defaultValue) {
-        if (value == null || value.trim().isEmpty()) {
-            return defaultValue;
-        }
-        return value.trim();
     }
 }
+
+String authType = safe(testCase.getAuthType()).trim().toUpperCase();
+
+if ("OAUTH2".equals(authType)) {
+    String token = TokenManager.getToken(testCase);
+    request.header("Authorization", "Bearer " + token);
+    System.out.println("OAuth2 Authorization header added");
+    extentTest.info("OAuth2 Authorization header added");
+}
+
+request.contentType("application/json");
+request.accept("application/json");
