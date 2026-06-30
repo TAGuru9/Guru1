@@ -18,9 +18,11 @@ public class SSLManager {
             String type = FrameworkConfig.getProperty("ssl.keystore.type");
             String alias = FrameworkConfig.getProperty("ssl.key.alias");
 
-            System.out.println("SSL keystore path = " + path);
-            System.out.println("SSL keystore type = " + type);
-            System.out.println("SSL alias = " + alias);
+            System.out.println("========== SSL CONFIG ==========");
+            System.out.println("Keystore path = " + path);
+            System.out.println("Keystore type = " + type);
+            System.out.println("Alias         = " + alias);
+            System.out.println("================================");
 
             String resourcePath = path.replace("classpath:", "");
 
@@ -29,7 +31,7 @@ public class SSLManager {
                     .getResourceAsStream(resourcePath);
 
             if (inputStream == null) {
-                throw new RuntimeException("JKS not found: " + resourcePath);
+                throw new RuntimeException("JKS not found in classpath: " + resourcePath);
             }
 
             KeyStore keyStore = KeyStore.getInstance(type);
@@ -44,7 +46,7 @@ public class SSLManager {
                                 System.out.println("Available SSL aliases: " + aliases.keySet());
 
                                 if (alias != null && aliases.containsKey(alias)) {
-                                    System.out.println("Using SSL alias: " + alias);
+                                    System.out.println("Using configured SSL alias: " + alias);
                                     return alias;
                                 }
 
