@@ -6,6 +6,7 @@ import org.apache.http.conn.ssl.SSLSocketFactory;
 import org.apache.http.ssl.SSLContexts;
 
 import javax.net.ssl.SSLContext;
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.security.KeyStore;
 
@@ -21,22 +22,10 @@ public class SSLManager {
             System.out.println("========== SSL CONFIG ==========");
             System.out.println("Keystore path = " + path);
             System.out.println("Keystore type = " + type);
-            System.out.println("Alias         = " + alias);
+            System.out.println("SSL alias     = " + alias);
             System.out.println("================================");
 
-            String resourcePath = path.replace("classpath:", "");
-
-            InputStream inputStream = Thread.currentThread()
-                    .getContextClassLoader()
-                    .getResourceAsStream(resourcePath);
-
-            if (inputStream == null) {
-                throw new RuntimeException("JKS not found in classpath: " + resourcePath);
-            }
-
-            KeyStore keyStore = KeyStore.getInstance(type);
-            keyStore.load(inputStream, password.toCharArray());
-            inputStream.close();
+            KeyStore keyStore = loadKeyStore(path, password, type);
 
             SSLContext sslContext = SSLContexts.custom()
                     .loadKeyMaterial(
@@ -46,7 +35,7 @@ public class SSLManager {
                                 System.out.println("Available SSL aliases: " + aliases.keySet());
 
                                 if (alias != null && aliases.containsKey(alias)) {
-                                    System.out.println("Using configured SSL alias: " + alias);
+                                    System.out.println("Using SSL alias: " + alias);
                                     return alias;
                                 }
 
@@ -72,5 +61,29 @@ public class SSLManager {
         } catch (Exception e) {
             throw new RuntimeException("Failed to load SSL certificate", e);
         }
+    }
+
+    private static KeyStore loadKeyStore(String path, String password, String type) throws Exception {
+        InputStream inputStream;
+
+        if (path.startsWith("classpath:")) {
+            String resourcePath = path.replace("classpath:", "");
+
+            inputStream = Thread.currentThread()
+                    .getContextClassLoader()
+                    .getResourceAsStream(resourcePath);
+
+            if (inputStream == null) {
+                throw new RuntimeException("JKS not found in classpath: " + resourcePath);
+            }
+        } else {
+            inputStream = new FileInputStream(path);
+        }
+
+        KeyStore keyStore = KeyStore.getInstance(type);
+        keyStore.load(inputStream, password.toCharArray());
+        inputStream.close();
+
+        return keyStore;
     }
 }
