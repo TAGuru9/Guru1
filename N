@@ -3,49 +3,61 @@ package com.acfc.automation.util;
 import io.restassured.config.RestAssuredConfig;
 import io.restassured.config.SSLConfig;
 import org.apache.http.conn.ssl.SSLSocketFactory;
-import org.apache.http.ssl.SSLContexts;
+import org.apache.http.ssl.SSLContextBuilder;
 
 import javax.net.ssl.SSLContext;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.KeyStore;
+import java.util.Enumeration;
 
 public class SSLManager {
 
     public static RestAssuredConfig getSSLConfig() {
         try {
-            String path = FrameworkConfig.getProperty("ssl.keystore.path");
-            String password = FrameworkConfig.getProperty("ssl.keystore.password");
-            String type = FrameworkConfig.getProperty("ssl.keystore.type");
-            String alias = FrameworkConfig.getProperty("ssl.key.alias");
+            String keyStorePath = required("ssl.keystore.path");
+            String keyStorePassword = required("ssl.keystore.password");
+            String keyStoreType = defaultValue(FrameworkConfig.getProperty("ssl.keystore.type"), "JKS");
+            String keyAlias = FrameworkConfig.getProperty("ssl.key.alias");
+
+            String trustStorePath = FrameworkConfig.getProperty("ssl.truststore.path");
+            String trustStorePassword = FrameworkConfig.getProperty("ssl.truststore.password");
+            String trustStoreType = defaultValue(FrameworkConfig.getProperty("ssl.truststore.type"), keyStoreType);
 
             System.out.println("========== SSL CONFIG ==========");
-            System.out.println("Keystore path = " + path);
-            System.out.println("Keystore type = " + type);
-            System.out.println("SSL alias     = " + alias);
+            System.out.println("Keystore path  : " + keyStorePath);
+            System.out.println("Keystore type  : " + keyStoreType);
+            System.out.println("Key alias      : " + keyAlias);
+            System.out.println("Truststore path: " + trustStorePath);
+            System.out.println("Truststore type: " + trustStoreType);
             System.out.println("================================");
 
-            KeyStore keyStore = loadKeyStore(path, password, type);
+            KeyStore keyStore = loadStore(keyStorePath, keyStorePassword, keyStoreType);
+            printAliases(keyStore);
 
-            SSLContext sslContext = SSLContexts.custom()
+            String finalAlias = resolveAlias(keyStore, keyAlias);
+
+            SSLContextBuilder builder = SSLContextBuilder.create()
                     .loadKeyMaterial(
                             keyStore,
-                            password.toCharArray(),
+                            keyStorePassword.toCharArray(),
                             (aliases, socket) -> {
-                                System.out.println("Available SSL aliases: " + aliases.keySet());
-
-                                if (alias != null && aliases.containsKey(alias)) {
-                                    System.out.println("Using SSL alias: " + alias);
-                                    return alias;
-                                }
-
-                                String firstAlias = aliases.keySet().iterator().next();
-                                System.out.println("Using first SSL alias: " + firstAlias);
-                                return firstAlias;
+                                System.out.println("Available client cert aliases: " + aliases.keySet());
+                                System.out.println("Using SSL alias: " + finalAlias);
+                                return finalAlias;
                             }
-                    )
-                    .loadTrustMaterial(null, (chain, authType) -> true)
-                    .build();
+                    );
+
+            if (trustStorePath != null && !trustStorePath.trim().isEmpty()) {
+                KeyStore trustStore = loadStore(trustStorePath, trustStorePassword, trustStoreType);
+                builder.loadTrustMaterial(trustStore, null);
+            } else {
+                builder.loadTrustMaterial(keyStore, null);
+            }
+
+            SSLContext sslContext = builder.build();
 
             SSLSocketFactory socketFactory = new SSLSocketFactory(
                     sslContext,
@@ -59,15 +71,23 @@ public class SSLManager {
                     );
 
         } catch (Exception e) {
-            throw new RuntimeException("Failed to load SSL certificate", e);
+            throw new RuntimeException("Failed to Load SSL certificate: " + e.getMessage(), e);
         }
     }
 
-    private static KeyStore loadKeyStore(String path, String password, String type) throws Exception {
+    private static KeyStore loadStore(String path, String password, String type) throws Exception {
+        if (path == null || path.trim().isEmpty()) {
+            throw new RuntimeException("SSL path is empty");
+        }
+
+        if (password == null) {
+            password = "";
+        }
+
         InputStream inputStream;
 
         if (path.startsWith("classpath:")) {
-            String resourcePath = path.replace("classpath:", "");
+            String resourcePath = path.replace("classpath:", "").trim();
 
             inputStream = Thread.currentThread()
                     .getContextClassLoader()
@@ -76,14 +96,67 @@ public class SSLManager {
             if (inputStream == null) {
                 throw new RuntimeException("JKS not found in classpath: " + resourcePath);
             }
+
         } else {
-            inputStream = new FileInputStream(path);
+            Path filePath = Path.of(path);
+
+            if (!Files.exists(filePath)) {
+                throw new RuntimeException("JKS file not found: " + filePath.toAbsolutePath());
+            }
+
+            inputStream = new FileInputStream(filePath.toFile());
         }
 
-        KeyStore keyStore = KeyStore.getInstance(type);
-        keyStore.load(inputStream, password.toCharArray());
+        KeyStore store = KeyStore.getInstance(type);
+        store.load(inputStream, password.toCharArray());
         inputStream.close();
 
-        return keyStore;
+        return store;
+    }
+
+    private static String resolveAlias(KeyStore keyStore, String configuredAlias) throws Exception {
+        if (configuredAlias != null && !configuredAlias.trim().isEmpty()) {
+            if (keyStore.containsAlias(configuredAlias)) {
+                return configuredAlias;
+            }
+            throw new RuntimeException("Configured ssl.key.alias not found in JKS: " + configuredAlias);
+        }
+
+        Enumeration<String> aliases = keyStore.aliases();
+
+        while (aliases.hasMoreElements()) {
+            String alias = aliases.nextElement();
+            if (keyStore.isKeyEntry(alias)) {
+                return alias;
+            }
+        }
+
+        throw new RuntimeException("No private key alias found in JKS");
+    }
+
+    private static void printAliases(KeyStore keyStore) throws Exception {
+        Enumeration<String> aliases = keyStore.aliases();
+
+        while (aliases.hasMoreElements()) {
+            String alias = aliases.nextElement();
+            System.out.println("JKS alias: " + alias + " | isKeyEntry=" + keyStore.isKeyEntry(alias));
+        }
+    }
+
+    private static String required(String key) {
+        String value = FrameworkConfig.getProperty(key);
+
+        if (value == null || value.trim().isEmpty()) {
+            throw new RuntimeException("Missing required property: " + key);
+        }
+
+        return value.trim();
+    }
+
+    private static String defaultValue(String value, String defaultValue) {
+        if (value == null || value.trim().isEmpty()) {
+            return defaultValue;
+        }
+        return value.trim();
     }
 }
