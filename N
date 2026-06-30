@@ -1,3 +1,74 @@
-keytool -list -v ^
--keystore C:\path\soapui_APIEE.jks ^
--storepass soapui
+package com.acfc.automation.util;
+
+import io.restassured.config.RestAssuredConfig;
+import io.restassured.config.SSLConfig;
+import org.apache.http.conn.ssl.SSLSocketFactory;
+import org.apache.http.ssl.SSLContexts;
+
+import javax.net.ssl.SSLContext;
+import java.io.InputStream;
+import java.security.KeyStore;
+
+public class SSLManager {
+
+    public static RestAssuredConfig getSSLConfig() {
+        try {
+            String path = FrameworkConfig.getProperty("ssl.keystore.path");
+            String password = FrameworkConfig.getProperty("ssl.keystore.password");
+            String type = FrameworkConfig.getProperty("ssl.keystore.type");
+            String alias = FrameworkConfig.getProperty("ssl.key.alias");
+
+            System.out.println("SSL keystore path = " + path);
+            System.out.println("SSL keystore type = " + type);
+            System.out.println("SSL alias = " + alias);
+
+            String resourcePath = path.replace("classpath:", "");
+
+            InputStream inputStream = Thread.currentThread()
+                    .getContextClassLoader()
+                    .getResourceAsStream(resourcePath);
+
+            if (inputStream == null) {
+                throw new RuntimeException("JKS not found: " + resourcePath);
+            }
+
+            KeyStore keyStore = KeyStore.getInstance(type);
+            keyStore.load(inputStream, password.toCharArray());
+            inputStream.close();
+
+            SSLContext sslContext = SSLContexts.custom()
+                    .loadKeyMaterial(
+                            keyStore,
+                            password.toCharArray(),
+                            (aliases, socket) -> {
+                                System.out.println("Available SSL aliases: " + aliases.keySet());
+
+                                if (alias != null && aliases.containsKey(alias)) {
+                                    System.out.println("Using SSL alias: " + alias);
+                                    return alias;
+                                }
+
+                                String firstAlias = aliases.keySet().iterator().next();
+                                System.out.println("Using first SSL alias: " + firstAlias);
+                                return firstAlias;
+                            }
+                    )
+                    .loadTrustMaterial(null, (chain, authType) -> true)
+                    .build();
+
+            SSLSocketFactory socketFactory = new SSLSocketFactory(
+                    sslContext,
+                    SSLSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER
+            );
+
+            return RestAssuredConfig.config()
+                    .sslConfig(
+                            SSLConfig.sslConfig()
+                                    .sslSocketFactory(socketFactory)
+                    );
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load SSL certificate", e);
+        }
+    }
+}
