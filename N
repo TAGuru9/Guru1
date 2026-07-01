@@ -1,1 +1,47 @@
-keytool -list -v -keystore "C:\Repo\TA_PepperAPI\project-cdr\src\test\resources\certificates\soapui_apigee.jks" -storepass soapui -storetype JKS
+private List<TestCase> selectCases(List<TestCase> allCases, String tcFile, String ids, String names) {
+    if (!tcFile.isBlank()) {
+        return uniqueById(allCases);
+    }
+
+    if (ids.isBlank() && names.isBlank()) {
+        throw new IllegalArgumentException("Provide ids, names, or tcFile");
+    }
+
+    List<TestCase> selected = new ArrayList<>();
+
+    if (!ids.isBlank()) {
+        List<String> idOrder = Arrays.stream(ids.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .collect(Collectors.toList());
+
+        for (String id : idOrder) {
+            TestCase match = allCases.stream()
+                    .filter(tc -> tc.getEnabled() == null || tc.getEnabled())
+                    .filter(tc -> tc.getId() != null && tc.getId().equalsIgnoreCase(id))
+                    .findFirst()
+                    .orElseThrow(() -> new RuntimeException("Test case id not found: " + id));
+
+            selected.add(match);
+        }
+    }
+
+    if (!names.isBlank()) {
+        List<String> nameOrder = Arrays.stream(names.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .collect(Collectors.toList());
+
+        for (String name : nameOrder) {
+            TestCase match = allCases.stream()
+                    .filter(tc -> tc.getEnabled() == null || tc.getEnabled())
+                    .filter(tc -> tc.getName() != null && tc.getName().equalsIgnoreCase(name))
+                    .findFirst()
+                    .orElseThrow(() -> new RuntimeException("Test case name not found: " + name));
+
+            selected.add(match);
+        }
+    }
+
+    return uniqueById(selected);
+}
