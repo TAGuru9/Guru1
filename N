@@ -10,34 +10,33 @@ private String replaceContextValues(String text) {
     while (guard < 200) {
 
         int start = resolved.indexOf("${");
-
         if (start < 0) {
             break;
         }
 
         int end = resolved.indexOf("}", start);
-
         if (end < 0) {
             break;
         }
 
         String key = resolved.substring(start + 2, end).trim();
 
+        System.out.println("=================================");
+        System.out.println("Looking for Context Variable : " + key);
+        System.out.println("Execution Context : " + ExecutionContext.getAll());
+
         Object value = ExecutionContext.get(key);
 
+        System.out.println("Resolved Value : " + value);
+        System.out.println("=================================");
+
         if (value == null) {
-
-            System.out.println("WARNING : Missing Context Variable : " + key);
-            System.out.println("Execution Context = " + ExecutionContext.getAll());
-
             break;
-
         }
 
-        resolved =
-                resolved.substring(0, start)
-                        + value
-                        + resolved.substring(end + 1);
+        resolved = resolved.substring(0, start)
+                + value.toString()
+                + resolved.substring(end + 1);
 
         guard++;
     }
