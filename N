@@ -1,12 +1,46 @@
-private String normalize(String value) {
-    if (value == null) {
-        return "";
+private String replaceContextValues(String text) {
+
+    if (text == null || text.isBlank()) {
+        return text;
     }
 
-    return value
-            .replace('\u00A0', ' ')
-            .replaceAll("[\\u200B-\\u200D\\uFEFF]", "")
-            .replaceAll("[\\r\\n\\t]+", " ")
-            .replaceAll("\\s+", " ")
-            .trim();
+    String resolved = text;
+    int guard = 0;
+
+    while (guard < 200) {
+
+        int start = resolved.indexOf("${");
+
+        if (start < 0) {
+            break;
+        }
+
+        int end = resolved.indexOf("}", start);
+
+        if (end < 0) {
+            break;
+        }
+
+        String key = resolved.substring(start + 2, end).trim();
+
+        Object value = ExecutionContext.get(key);
+
+        if (value == null) {
+
+            System.out.println("WARNING : Missing Context Variable : " + key);
+            System.out.println("Execution Context = " + ExecutionContext.getAll());
+
+            break;
+
+        }
+
+        resolved =
+                resolved.substring(0, start)
+                        + value
+                        + resolved.substring(end + 1);
+
+        guard++;
+    }
+
+    return resolved;
 }
