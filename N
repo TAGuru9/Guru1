@@ -1,59 +1,12 @@
-JsonPath jsonPathResponse = response.jsonPath();
-
-for (Map.Entry<String, String> entry : testCase.getExpectedBodyJsonPaths().entrySet()) {
-
-    String jsonPath = entry.getKey();
-
-    // resolves ${authorizationMessage}
-    String expected = replaceContextValues(entry.getValue());
-
-    String finalStatus = "PASS";
-
-    try {
-        Object actualObj = jsonPathResponse.get(jsonPath);
-
-        String actual = actualObj == null ? "" : actualObj.toString();
-
-        String expectedNormalized = normalize(expected);
-        String actualNormalized = normalize(actual);
-
-        boolean matched;
-
-        if (expectedNormalized.startsWith("contains:")) {
-            String expectedContains = expectedNormalized.replace("contains:", "").trim();
-            matched = actualNormalized.contains(expectedContains);
-        } else {
-            matched = expectedNormalized.equals(actualNormalized);
-        }
-
-        System.out.println("Type: JSONPATH | Field: " + jsonPath);
-        System.out.println("Expected Raw: " + expected);
-        System.out.println("Actual Raw: " + actual);
-        System.out.println("Expected Normalized: " + expectedNormalized);
-        System.out.println("Actual Normalized: " + actualNormalized);
-        System.out.println("Result: " + (matched ? "PASS" : "FAIL"));
-
-        details.add(new ValidationDetail(
-                "JSONPATH",
-                jsonPath,
-                expected,
-                actual,
-                matched ? "PASS" : "FAIL"
-        ));
-
-        if (!matched) {
-            finalStatus = "FAIL";
-        }
-
-    } catch (Exception e) {
-        details.add(new ValidationDetail(
-                "JSONPATH",
-                jsonPath,
-                expected,
-                "ERROR: " + e.getMessage(),
-                "FAIL"
-        ));
-
-        finalStatus = "FAIL";
+private String normalize(String value) {
+    if (value == null) {
+        return "";
     }
+
+    return value
+            .replace('\u00A0', ' ')
+            .replaceAll("[\\u200B-\\u200D\\uFEFF]", "")
+            .replaceAll("[\\r\\n\\t]+", " ")
+            .replaceAll("\\s+", " ")
+            .trim();
 }
