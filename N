@@ -1,24 +1,59 @@
-validateBusinessErrorInBody(testCase, responseBody, extentTest);
+JsonPath jsonPathResponse = response.jsonPath();
 
-// ADD HERE
-if (testCase.getExpectedBodyJsonPaths() != null) {
-    testCase.getExpectedBodyJsonPaths().replaceAll((jsonPath, expectedValue) -> {
-        if (expectedValue == null) {
-            return null;
+for (Map.Entry<String, String> entry : testCase.getExpectedBodyJsonPaths().entrySet()) {
+
+    String jsonPath = entry.getKey();
+
+    // resolves ${authorizationMessage}
+    String expected = replaceContextValues(entry.getValue());
+
+    String finalStatus = "PASS";
+
+    try {
+        Object actualObj = jsonPathResponse.get(jsonPath);
+
+        String actual = actualObj == null ? "" : actualObj.toString();
+
+        String expectedNormalized = normalize(expected);
+        String actualNormalized = normalize(actual);
+
+        boolean matched;
+
+        if (expectedNormalized.startsWith("contains:")) {
+            String expectedContains = expectedNormalized.replace("contains:", "").trim();
+            matched = actualNormalized.contains(expectedContains);
+        } else {
+            matched = expectedNormalized.equals(actualNormalized);
         }
 
-        String resolvedValue = replaceContextValues(expectedValue);
-        resolvedValue = resolveInlineProperties(resolvedValue);
+        System.out.println("Type: JSONPATH | Field: " + jsonPath);
+        System.out.println("Expected Raw: " + expected);
+        System.out.println("Actual Raw: " + actual);
+        System.out.println("Expected Normalized: " + expectedNormalized);
+        System.out.println("Actual Normalized: " + actualNormalized);
+        System.out.println("Result: " + (matched ? "PASS" : "FAIL"));
 
-        System.out.println("Expected JSONPath: " + jsonPath);
-        System.out.println("Original Expected: " + expectedValue);
-        System.out.println("Resolved Expected: " + resolvedValue);
+        details.add(new ValidationDetail(
+                "JSONPATH",
+                jsonPath,
+                expected,
+                actual,
+                matched ? "PASS" : "FAIL"
+        ));
 
-        extentTest.info("Expected JSONPath: " + jsonPath);
-        extentTest.info("Resolved Expected: " + resolvedValue);
+        if (!matched) {
+            finalStatus = "FAIL";
+        }
 
-        return resolvedValue;
-    });
+    } catch (Exception e) {
+        details.add(new ValidationDetail(
+                "JSONPATH",
+                jsonPath,
+                expected,
+                "ERROR: " + e.getMessage(),
+                "FAIL"
+        ));
+
+        finalStatus = "FAIL";
+    }
 }
-
-ApiValidator.ValidationOutcome outcome = validator.validate(testCase, response);
