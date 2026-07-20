@@ -1,17 +1,40 @@
-$vmNames = @"
-VM01
-VM02
-VM03
-VM04
-VM05
-"@ -split "`r?`n" | Where-Object { $_.Trim() }
-
-foreach ($vm in $vmNames) {
-    try {
-        $ip = (Resolve-DnsName $vm -Type A -ErrorAction Stop).IPAddress
-        Write-Host "$vm : $ip"
+public static synchronized void renameReportByLobAndMember(
+        String lob,
+        String memberId
+) {
+    if (reportFilePath == null || reportFilePath.isBlank()) {
+        System.out.println("Extent report path is empty. Report cannot be renamed.");
+        return;
     }
-    catch {
-        Write-Host "$vm : IP Address Not Found"
+
+    String safeLob = sanitizeFileName(lob);
+    String safeMemberId = sanitizeFileName(memberId);
+
+    Path currentReport = Paths.get(reportFilePath);
+
+    if (!Files.exists(currentReport)) {
+        System.out.println("Extent report file not found: " + currentReport);
+        return;
+    }
+
+    Path renamedReport = currentReport.getParent()
+            .resolve(safeLob + "_" + safeMemberId + ".html");
+
+    try {
+        Files.move(
+                currentReport,
+                renamedReport,
+                StandardCopyOption.REPLACE_EXISTING
+        );
+
+        reportFilePath = renamedReport.toAbsolutePath().toString();
+
+        System.out.println("Extent report renamed to: " + reportFilePath);
+
+    } catch (IOException e) {
+        throw new RuntimeException(
+                "Unable to rename Extent report: " + e.getMessage(),
+                e
+        );
     }
 }
