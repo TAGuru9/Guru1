@@ -1,40 +1,10 @@
-public static synchronized void renameReportByLobAndMember(
-        String lob,
-        String memberId
-) {
-    if (reportFilePath == null || reportFilePath.isBlank()) {
-        System.out.println("Extent report path is empty. Report cannot be renamed.");
-        return;
+private static String sanitizeFileName(String value) {
+    if (value == null || value.trim().isEmpty()) {
+        return "UNKNOWN";
     }
 
-    String safeLob = sanitizeFileName(lob);
-    String safeMemberId = sanitizeFileName(memberId);
-
-    Path currentReport = Paths.get(reportFilePath);
-
-    if (!Files.exists(currentReport)) {
-        System.out.println("Extent report file not found: " + currentReport);
-        return;
-    }
-
-    Path renamedReport = currentReport.getParent()
-            .resolve(safeLob + "_" + safeMemberId + ".html");
-
-    try {
-        Files.move(
-                currentReport,
-                renamedReport,
-                StandardCopyOption.REPLACE_EXISTING
-        );
-
-        reportFilePath = renamedReport.toAbsolutePath().toString();
-
-        System.out.println("Extent report renamed to: " + reportFilePath);
-
-    } catch (IOException e) {
-        throw new RuntimeException(
-                "Unable to rename Extent report: " + e.getMessage(),
-                e
-        );
-    }
+    return value.trim()
+            .replaceAll("[^a-zA-Z0-9_-]", "_")
+            .replaceAll("_+", "_")
+            .replaceAll("^_+|_+$", "");
 }
