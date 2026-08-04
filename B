@@ -1,0 +1,23 @@
+After yesterday’s discussion, I wanted to share a thought regarding the proposed automation organization.
+
+As we continue to expand our automation capabilities, I believe having automation engineers reporting under individual QA managers may become increasingly difficult to manage over time. Each QA team naturally has different priorities, timelines, and objectives, which can make it challenging to align automation efforts, maintain consistent engineering standards, and execute against a common automation roadmap.
+
+Instead, I believe we would benefit from a centralized Test Automation organization that functions as a shared engineering service across all QA teams. This team could own the automation frameworks, standards, governance, reusable components, CI/CD integration, AI initiatives, and automation best practices while partnering with QA managers to support project delivery based on business priorities.
+
+This model would provide several advantages:
+
+* Better alignment to enterprise automation goals and roadmap.
+* Consistent frameworks, coding standards, and engineering practices.
+* More efficient utilization of automation engineers across teams.
+* Greater knowledge sharing and cross-training opportunities.
+* Faster adoption of new automation technologies and AI capabilities.
+* Reduced duplication of effort and lower maintenance costs.
+* Clear ownership and accountability for automation strategy and innovation.
+
+QA managers would continue to own testing strategy, release quality, and business delivery, while the centralized automation team would focus on delivering scalable, high-quality automation solutions across the organization.
+
+I believe this approach will position us to scale automation more effectively while maximizing the value of our automation investments.
+
+I’d be happy to discuss this idea further if you think it would be helpful.
+
+Thank you for your time and consideration.
