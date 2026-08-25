@@ -1,23 +1,55 @@
-After yesterday’s discussion, I wanted to share a thought regarding the proposed automation organization.
+skipped;
 
-As we continue to expand our automation capabilities, I believe having automation engineers reporting under individual QA managers may become increasingly difficult to manage over time. Each QA team naturally has different priorities, timelines, and objectives, which can make it challenging to align automation efforts, maintain consistent engineering standards, and execute against a common automation roadmap.
+        System.out.println();
 
-Instead, I believe we would benefit from a centralized Test Automation organization that functions as a shared engineering service across all QA teams. This team could own the automation frameworks, standards, governance, reusable components, CI/CD integration, AI initiatives, and automation best practices while partnering with QA managers to support project delivery based on business priorities.
+        System.out.println("====================================");
 
-This model would provide several advantages:
+        System.out.println("       EXTENT TEST SUMMARY");
 
-* Better alignment to enterprise automation goals and roadmap.
-* Consistent frameworks, coding standards, and engineering practices.
-* More efficient utilization of automation engineers across teams.
-* Greater knowledge sharing and cross-training opportunities.
-* Faster adoption of new automation technologies and AI capabilities.
-* Reduced duplication of effort and lower maintenance costs.
-* Clear ownership and accountability for automation strategy and innovation.
+        System.out.println("====================================");
 
-QA managers would continue to own testing strategy, release quality, and business delivery, while the centralized automation team would focus on delivering scalable, high-quality automation solutions across the organization.
+        System.out.println("Total   : " + total);
 
-I believe this approach will position us to scale automation more effectively while maximizing the value of our automation investments.
+        System.out.println("Passed  : " + passed);
 
-I’d be happy to discuss this idea further if you think it would be helpful.
+        System.out.println("Failed  : " + failed);
 
-Thank you for your time and consideration.
+        System.out.println("Skipped : " + skipped);
+
+        System.out.println("====================================");
+
+        // Send final counts to KPI
+
+        KpiWriter.writeSuiteSummary(
+
+                (int) total,
+
+                (int) passed,
+
+                (int) failed,
+
+                (int) skipped
+
+        );
+
+    } catch (Exception e) {
+
+        // KPI problem should NOT stop report generation
+
+        System.err.println(
+
+                "Unable to write Extent KPI summary: "
+
+                        + e.getMessage()
+
+        );
+
+    } finally {
+
+        // Always generate Extent report
+
+        extent.flush();
+
+    }
+
+}
