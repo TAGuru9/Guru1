@@ -1,55 +1,621 @@
-skipped;
+Below is a requirements document you can give to GitHub Copilot to build Resilio inside the AmeriHealth environment. I’m defining Resilio as an internal quality-engineering portal that manages API test execution, Jenkins integration, live status, reports, KPI tracking, and AI-assisted failure analysis.
 
-        System.out.println();
+Resilio — Product Requirements
 
-        System.out.println("====================================");
+1. Purpose
 
-        System.out.println("       EXTENT TEST SUMMARY");
+Resilio will provide a single internal portal for teams to:
 
-        System.out.println("====================================");
+* Start automated API tests.
+* Run tests by project, environment, suite, tag, or test-case ID.
+* Monitor execution in real time.
+* View request, response, pass, fail, and skipped results.
+* Download execution reports.
+* Track automation KPIs.
+* Analyze failures.
+* Compare results across builds.
+* Integrate with Jenkins, Git repositories, databases, and the existing Java API automation framework.
 
-        System.out.println("Total   : " + total);
+Resilio must run entirely within AmeriHealth-approved infrastructure.
 
-        System.out.println("Passed  : " + passed);
+2. Primary Users
 
-        System.out.println("Failed  : " + failed);
+* Quality engineers
+* Automation engineers
+* Developers
+* QA managers
+* Product teams
+* Release managers
+* Application support teams
+* Administrators
 
-        System.out.println("Skipped : " + skipped);
+3. Roles and Permissions
 
-        System.out.println("====================================");
+Administrator
 
-        // Send final counts to KPI
+* Manage users and roles.
+* Register projects.
+* Configure environments.
+* Configure Jenkins and repository connections.
+* Manage secrets references.
+* View audit logs.
+* Retain or archive execution records.
 
-        KpiWriter.writeSuiteSummary(
+Automation Engineer
 
-                (int) total,
+* Configure test suites.
+* Start executions.
+* Upload test data.
+* View detailed requests and responses.
+* Rerun failed tests.
+* Manage test-case metadata.
 
-                (int) passed,
+QA Engineer
 
-                (int) failed,
+* Start approved tests.
+* Monitor executions.
+* View and download reports.
+* Rerun failed tests.
+* View failure analysis.
 
-                (int) skipped
+Manager/Viewer
 
-        );
+* View dashboards, trends, and reports.
+* Filter results by project, application, release, or date.
+* Cannot change configurations or execute restricted tests.
 
-    } catch (Exception e) {
+4. Functional Requirements
 
-        // KPI problem should NOT stop report generation
+4.1 Authentication
 
-        System.err.println(
+* Integrate with AmeriHealth SSO.
+* Support approved enterprise identity providers.
+* Enforce role-based access control.
+* Automatically end inactive sessions.
+* Do not store user passwords.
+* Record login and access events in audit logs.
 
-                "Unable to write Extent KPI summary: "
+4.2 Project Management
 
-                        + e.getMessage()
+Each project must contain:
 
-        );
+* Project name
+* Product or business area
+* Application name
+* Repository location
+* Default branch
+* Jenkins job name
+* Framework location
+* Available environments
+* Available test suites
+* Project owners
+* Notification group
+* Active/inactive status
 
-    } finally {
+Users must only see projects they are authorized to access.
 
-        // Always generate Extent report
+4.3 Environment Configuration
 
-        extent.flush();
+Support environments such as:
 
+* Development
+* QA
+* SIT
+* UAT
+* Performance
+* Production, if explicitly authorized
+
+Each environment may define:
+
+* Base API URL
+* Authentication type
+* OAuth configuration reference
+* SSL certificate reference
+* Database configuration reference
+* Response-time threshold
+* Jenkins agent label
+* Environment-specific properties
+
+Secrets, tokens, passwords, and certificate passcodes must never be stored as plain text in Resilio.
+
+4.4 Test Execution
+
+Users must be able to start a test using:
+
+* Project
+* Environment
+* Git branch
+* Run type
+* Suite
+* Cucumber tag
+* Single test-case ID
+* Multiple test-case IDs
+* Smoke tests
+* Regression tests
+* Negative tests
+* Master suite
+* Failed-test rerun
+
+Optional execution inputs:
+
+* Release number
+* Build number
+* Commit ID
+* Defect number
+* Test-data file
+* Payload file
+* Test-case JSON file
+* Custom runtime parameters
+* PCP flag or similar project-specific flags
+
+Resilio must validate all inputs before starting Jenkins.
+
+4.5 File Upload
+
+Allow approved file types only:
+
+* .json
+* .csv
+* .txt
+* .yaml
+* .yml
+
+Requirements:
+
+* Enforce configurable file-size limits.
+* Scan files using AmeriHealth-approved malware scanning.
+* Validate JSON and YAML syntax.
+* Reject executable or unsupported files.
+* Store files only in approved internal locations.
+* Do not expose server-side paths to users.
+* Delete temporary files after the configured retention period.
+* Record uploader, timestamp, project, and execution ID.
+
+GET tests must not require a payload file.
+
+4.6 Jenkins Integration
+
+Resilio must:
+
+* Start an approved Jenkins job through the Jenkins API.
+* Pass execution parameters securely.
+* Capture the Jenkins queue ID and build number.
+* Track queued, running, completed, aborted, and failed states.
+* Display the Jenkins build URL.
+* Stream or periodically retrieve approved console output.
+* Wait for the complete execution before finalizing results.
+* Allow authorized users to stop a running build.
+* Prevent duplicate execution requests caused by repeated clicks.
+* Handle Jenkins outages and API timeouts gracefully.
+
+Example Jenkins parameters:
+
+* PROJECT
+* PRODUCT
+* ENVIRONMENT
+* BRANCH
+* RUN_TYPE
+* TAGS
+* TEST_CASE_IDS
+* PAYLOAD_PATH
+* DATA_FILE_PATH
+* OAUTH2_ENABLED
+* SSL_ENABLED
+* DB_VALIDATION_ENABLED
+* PCP_ENABLED
+* REQUESTED_BY
+* RESILIO_EXECUTION_ID
+
+4.7 Live Execution Dashboard
+
+Display:
+
+* Execution ID
+* Project
+* Environment
+* Suite
+* Requested by
+* Start time
+* Current duration
+* Current test case
+* Total test cases
+* Completed percentage
+* Passed count
+* Failed count
+* Skipped count
+* Currently running count
+* Queued count
+* Jenkins build status
+
+Execution states:
+
+* Created
+* Validating
+* Queued
+* Running
+* Passed
+* Failed
+* Partially passed
+* Aborted
+* Timed out
+* Infrastructure error
+
+The dashboard should refresh without requiring a full browser reload.
+
+4.8 Parallel Execution
+
+* Allow suites to run in parallel when supported by Jenkins and the framework.
+* Display each parallel worker separately.
+* Aggregate worker results into one execution.
+* Prevent duplicate counting.
+* Distinguish test failures from worker or infrastructure failures.
+* Make concurrency configurable by project and environment.
+
+4.9 Test Results
+
+Capture results at the scenario or test-case level:
+
+* Test-case ID
+* Scenario name
+* Tags
+* Suite
+* Start and end time
+* Duration
+* Status
+* HTTP method
+* Endpoint, with sensitive values masked
+* Response status code
+* Validation results
+* Failure message
+* Stack trace, if permitted
+* Retry count
+* Jenkins build number
+* Git commit
+* Report location
+
+Test details should show:
+
+* Request headers with secrets masked
+* Request body with sensitive fields masked
+* Response headers with sensitive fields masked
+* Response body with PHI/PII masking
+* Database validation results
+* Expected versus actual values
+* Execution logs
+
+4.10 Reporting
+
+Support:
+
+* Extent HTML report
+* Cucumber JSON report
+* JUnit XML report
+* Resilio summary report
+* Downloadable CSV export
+
+Reports must remain associated with their original execution ID.
+
+Users should be able to filter by:
+
+* Date range
+* Project
+* Application
+* Environment
+* Release
+* Branch
+* Suite
+* Status
+* Test-case ID
+* Requested by
+
+4.11 Failed-Test Rerun
+
+* Allow rerunning all failed tests from an execution.
+* Allow selecting individual failed tests.
+* Link rerun results to the original execution.
+* Show original status and rerun status.
+* Do not replace the original result.
+* Track how many attempts were required.
+* Distinguish stable failures from flaky tests.
+
+4.12 KPI Dashboard
+
+Display:
+
+* Total executions
+* Total test cases
+* Pass rate
+* Failure rate
+* Skipped rate
+* Automation coverage
+* Average execution time
+* Time saved through automation
+* Flaky-test rate
+* Rerun success rate
+* Failures by application
+* Failures by environment
+* Failures by test suite
+* Execution trend by day, week, and release
+* Top recurring failures
+* Infrastructure failure rate
+
+KPI records should include:
+
+* Execution ID
+* Project
+* Environment
+* Suite
+* Build number
+* Jenkins URL
+* Git branch
+* Commit ID
+* Release number
+* Total
+* Passed
+* Failed
+* Skipped
+* Duration
+* Requested by
+* Start and completion timestamps
+
+4.13 Failure Classification
+
+Classify failures as:
+
+* Assertion failure
+* API functional failure
+* Authentication failure
+* SSL/certificate failure
+* Test-data failure
+* Database validation failure
+* Schema validation failure
+* Response-time failure
+* Framework failure
+* Jenkins failure
+* Environment failure
+* Network failure
+* Unknown failure
+
+Users with permission should be able to correct the classification.
+
+4.14 AI-Assisted Analysis
+
+If AmeriHealth approves AI use, Resilio may provide:
+
+* Failure summary in plain language.
+* Suggested probable cause.
+* Similar previous failures.
+* Recommended investigation steps.
+* Log summarization.
+* Detection of recurring failure patterns.
+* Suggested defect description.
+
+AI requirements:
+
+* Use only AmeriHealth-approved models and endpoints.
+* Do not send PHI, PII, secrets, tokens, or unrestricted logs to an external service.
+* Mask sensitive content before submitting it to a model.
+* Label AI-generated information clearly.
+* Require human review.
+* Do not allow AI to modify production data or approve releases.
+* Record when AI analysis was requested and by whom.
+
+5. API Automation Framework Integration
+
+Resilio must work with the existing Java framework using:
+
+* Java 17
+* Gradle Wrapper
+* REST Assured
+* Cucumber 7
+* JUnit 5
+* Extent Reports
+* JSON schema validation
+* CSV, JSON, and text-based test data
+* OAuth2
+* SSL/JKS certificates
+* Database-driven test data
+* Response-to-database validation
+* MySQL KPI integration
+* Tag and test-case-ID execution
+
+The framework must produce machine-readable results. Resilio should not depend only on parsing HTML.
+
+Recommended result contract:
+
+{
+  "executionId": "RES-20260901-000123",
+  "project": "member-api",
+  "environment": "qa",
+  "status": "FAILED",
+  "startedAt": "2026-09-01T14:00:00Z",
+  "completedAt": "2026-09-01T14:08:42Z",
+  "durationSeconds": 522,
+  "summary": {
+    "total": 125,
+    "passed": 119,
+    "failed": 4,
+    "skipped": 2
+  },
+  "jenkins": {
+    "jobName": "member-api-tests",
+    "buildNumber": 245,
+    "buildUrl": "INTERNAL_JENKINS_URL"
+  },
+  "source": {
+    "branch": "release-2026.09",
+    "commitId": "abc123"
+  },
+  "results": [
+    {
+      "testCaseId": "TC001",
+      "scenario": "Retrieve valid member",
+      "suite": "smoke",
+      "status": "PASSED",
+      "durationMilliseconds": 1485,
+      "httpStatus": 200,
+      "failureCategory": null,
+      "failureMessage": null
     }
-
+  ]
 }
+
+6. Security and Compliance Requirements
+
+Because this will operate inside a healthcare environment:
+
+* Do not store real PHI in test data unless explicitly approved.
+* Prefer synthetic or masked data.
+* Encrypt data in transit and at rest.
+* Mask member IDs, names, dates of birth, SSNs, tokens, cookies, and authorization headers.
+* Use an approved enterprise secrets manager.
+* Never place passwords in source code, configuration files, logs, or database tables.
+* Apply least-privilege access.
+* Record configuration changes and executions in immutable audit logs.
+* Enforce data-retention and deletion policies.
+* Run dependency, static-code, and container security scans.
+* Use only approved internal package repositories.
+* Restrict outbound network connections.
+* Protect against SQL injection, path traversal, malicious uploads, and cross-site scripting.
+* Do not permit arbitrary commands or arbitrary Jenkins job names from the user interface.
+* Maintain separate permissions for viewing summarized results and viewing request/response bodies.
+
+7. Audit Requirements
+
+Record:
+
+* User login and logout
+* Execution creation
+* Execution cancellation
+* File upload and deletion
+* Configuration changes
+* Permission changes
+* Report downloads
+* Viewing of sensitive test details
+* AI analysis requests
+* Failed authentication and authorization attempts
+
+Each audit event must include timestamp, user, action, object, result, and correlation ID.
+
+8. Reliability Requirements
+
+* Recover safely from Jenkins or database interruptions.
+* Do not lose completed test results.
+* Use unique execution IDs.
+* Make result ingestion idempotent.
+* Retry temporary integration failures with controlled backoff.
+* Prevent one project’s failure from affecting another.
+* Show a clear infrastructure-error status when tests did not actually run.
+* Support configurable execution timeouts.
+* Maintain health checks for application, database, Jenkins, and dependent services.
+
+9. Performance Requirements
+
+Initial targets:
+
+* Main dashboard loads within 3 seconds under normal load.
+* Filters return within 3 seconds.
+* Execution submission responds within 5 seconds.
+* Live status updates appear within 10 seconds.
+* Result processing supports at least 10,000 test-case results per execution.
+* Large logs and response bodies must be loaded only when requested.
+* Dashboard summaries must use aggregated data instead of scanning raw reports.
+
+Final targets should be confirmed through AmeriHealth architecture review and expected usage volume.
+
+10. Suggested Architecture
+
+* Front end: React with TypeScript
+* Backend: Spring Boot with Java 17
+* Authentication: AmeriHealth SSO/OIDC
+* Database: AmeriHealth-approved relational database
+* Build system: Gradle
+* Test orchestrator: Jenkins
+* Real-time updates: Server-Sent Events or approved WebSocket implementation
+* Secrets: approved enterprise secrets manager
+* Reports: approved internal artifact storage
+* Deployment: approved internal platform, VM, Kubernetes, or OpenShift
+* Logging: approved centralized logging platform
+* Monitoring: approved enterprise monitoring platform
+
+Copilot must not invent authentication, database, Jenkins, or certificate values. These must be injected through secured configuration.
+
+11. Core Data Entities
+
+* User
+* Role
+* Project
+* ProjectAccess
+* Environment
+* TestSuite
+* TestCase
+* Execution
+* ExecutionParameter
+* TestResult
+* ValidationResult
+* ReportArtifact
+* JenkinsBuild
+* FailureClassification
+* KPIRecord
+* UploadedFile
+* Notification
+* AuditEvent
+
+12. Minimum Viable Product
+
+The first release should include:
+
+1. SSO and role-based access.
+2. Project and environment selection.
+3. Jenkins test execution.
+4. Suite, tag, and test-case-ID selection.
+5. Live execution status.
+6. Pass, fail, skipped, and duration summary.
+7. Detailed test results.
+8. Extent and machine-readable report links.
+9. Failed-test rerun.
+10. KPI dashboard.
+11. Security masking.
+12. Audit logging.
+
+AI failure analysis, advanced flaky-test detection, and predictive analytics can follow after the core platform passes security and architecture reviews.
+
+13. Acceptance Criteria
+
+Resilio is ready for its first release when:
+
+* An authorized user can sign in using AmeriHealth SSO.
+* The user can start an approved Jenkins test for an authorized project.
+* Jenkins parameters match the selected UI inputs.
+* The portal displays queued, running, and completed states.
+* Final totals exactly match the framework results.
+* Parallel results are aggregated without duplication.
+* Failed tests can be rerun.
+* Original and rerun results remain linked.
+* Sensitive fields do not appear unmasked in the UI, logs, database, or reports.
+* Unauthorized users cannot execute or view restricted projects.
+* Every execution and configuration change appears in the audit log.
+* KPI data is stored only after the final test results are available.
+* Jenkins, network, and framework failures are displayed separately from test failures.
+
+Copilot Starting Prompt
+
+Build an internal enterprise application named Resilio.
+Use React with TypeScript for the frontend and Spring Boot with Java 17 and
+Gradle for the backend. Resilio is a healthcare quality-engineering portal
+that starts approved Jenkins API automation jobs, monitors execution status,
+ingests machine-readable test results, displays pass/fail/skipped totals,
+supports failed-test reruns, and stores KPI history.
+Apply clean architecture and create separate modules for authentication,
+projects, environments, executions, Jenkins integration, results, reports,
+KPIs, notifications, and audit logging.
+Start with mocked SSO and Jenkins adapters. All external integrations must be
+defined behind interfaces so AmeriHealth-approved implementations can replace
+the mocks later.
+Do not place secrets, tokens, passwords, PHI, certificate passcodes, internal
+URLs, or member data in source code. Add role-based authorization, input
+validation, sensitive-data masking, correlation IDs, structured logging,
+global error handling, audit events, and unit/integration tests.
+Create the database migrations, REST API contracts, backend services, and a
+responsive dashboard. Implement one feature at a time and provide tests and
+README instructions for every feature.
