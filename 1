@@ -1,0 +1,80 @@
+Create a complete, locally executable MVP application named Resilio in the current empty folder.
+
+Technology:
+
+* Backend: Java 17, Spring Boot 3, Gradle Wrapper
+* Frontend: React, TypeScript and Vite
+* Local database: H2
+* Production database support: configurable through environment variables
+* API documentation: Swagger/OpenAPI
+* Testing: JUnit 5, Mockito and frontend unit tests
+* Operating system: Windows
+* All commands and scripts must work in PowerShell
+
+Create this structure:
+
+resilio-backend/
+resilio-frontend/
+docs/
+README.md
+start-resilio.ps1
+stop-resilio.ps1
+
+MVP features:
+
+1. Dashboard showing total, passed, failed, skipped and running test counts.
+2. Execution form with project, environment, suite, Cucumber tags and test-case IDs.
+3. Execution history page.
+4. Execution details page.
+5. Mock Jenkins integration for local development.
+6. REST APIs for projects, environments, executions, test results and KPI summaries.
+7. Failed-test rerun endpoint.
+8. Role-based access with local development roles: ADMIN, ENGINEER and VIEWER.
+9. Audit logging for executions and configuration changes.
+10. Sensitive-data masking for Authorization headers, tokens, passwords, member IDs, names and dates of birth.
+11. Health-check endpoint.
+12. Global exception handling and structured application logs.
+
+Important implementation rules:
+
+* Generate real, complete code—not pseudocode or placeholders.
+* The first version must run locally without Jenkins, SSO or an external database.
+* Use an H2 database and seed it with sample projects, environments and execution results.
+* The mock Jenkins service must simulate queued, running and completed states.
+* Keep Jenkins, SSO and database integrations behind Java interfaces so real AmeriHealth implementations can replace the local versions later.
+* Do not include actual AmeriHealth URLs, credentials, certificates, PHI or member data.
+* Do not hard-code passwords or tokens.
+* Use DTOs, validation, services, repositories and controllers.
+* Add CORS configuration for the local React frontend.
+* Backend must run on port 8080.
+* Frontend must run on port 5173.
+* Configure the frontend API base URL through a .env file.
+* Include Gradle Wrapper files so Gradle does not need to be installed globally.
+* Create automated tests for the important backend endpoints and services.
+* Create a .gitignore.
+* Create a detailed README with prerequisites, installation, execution, testing and troubleshooting instructions.
+
+Create start-resilio.ps1 that:
+
+1. Checks that Java 17 and Node.js are installed.
+2. Starts the Spring Boot backend.
+3. Installs frontend packages when needed.
+4. Starts the React frontend.
+5. Opens http://localhost:5173.
+6. Writes backend and frontend logs into a local logs directory.
+7. Displays clear errors if startup fails.
+
+Create stop-resilio.ps1 to safely stop both local processes.
+
+After generating all files:
+
+1. Run the backend tests.
+2. Run the frontend build.
+3. Fix all compilation and test errors.
+4. Start both applications.
+5. Verify the backend health endpoint.
+6. Verify that the dashboard loads.
+7. Show me the exact PowerShell commands used.
+8. Summarize created files and any remaining limitations.
+
+Begin by creating the backend, make it compile and pass its tests, and then create the frontend. Continue until the complete MVP runs locally.
