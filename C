@@ -1,34 +1,76 @@
-Write-Host "******** Start copy to workspace path ********"
+$connectionString = "server=$sMySQLHost;port=$dbport;uid=$sMySQLUserName;pwd=$sMySQLPW;database=$sMySQLDB;"
 
-$artifactFolder = Join-Path $env:WORKSPACE "artifacts"
+$conn = $null
+$command = $null
 
-if (-not (Test-Path $artifactFolder)) {
-    New-Item -Path $artifactFolder -ItemType Directory -Force | Out-Null
+try {
+    Write-Host "========== MySQL Insert Started =========="
+    Write-Host "MySQL server: $sMySQLHost"
+    Write-Host "MySQL port: $dbport"
+    Write-Host "MySQL database: $sMySQLDB"
+    Write-Host "MySQL user: $sMySQLUserName"
+    # Do not print the password
+
+    $conn = New-Object MySql.Data.MySqlClient.MySqlConnection(
+        $connectionString
+    )
+
+    $conn.Open()
+
+    Write-Host "MySQL connection state: $($conn.State)"
+
+    if ($conn.State -ne "Open") {
+        throw "MySQL connection was not opened."
+    }
+
+    $command = $conn.CreateCommand()
+    $command.CommandText = $Query
+    $command.CommandTimeout = 60
+
+    Write-Host "Executing MySQL insert..."
+    Write-Host "Query: $Query"
+
+    # This line was commented out in your current code
+    $RowsInserted = $command.ExecuteNonQuery()
+
+    Write-Host "Rows inserted: $RowsInserted"
+
+    if ($RowsInserted -gt 0) {
+        Write-Host "SUCCESS: Run information added to TA MySQL."
+        Log-Message("Inserted rows into TA MySQL: $RowsInserted")
+    }
+    else {
+        throw "The query completed but inserted zero rows."
+    }
 }
+catch {
+    Write-Host "========== MYSQL ERROR ==========" -ForegroundColor Red
+    Write-Host "Message: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Exception type: $($_.Exception.GetType().FullName)"
+    
+    if ($_.Exception.InnerException) {
+        Write-Host "Inner error: $($_.Exception.InnerException.Message)" `
+            -ForegroundColor Red
+    }
 
-$workspaceExcel = Join-Path $artifactFolder (Split-Path $generatedExcel -Leaf)
-$workspaceOutput = Join-Path $artifactFolder (Split-Path $outputFile -Leaf)
+    Write-Host "Query attempted: $Query"
+    Write-Host "=================================" -ForegroundColor Red
 
-if (Test-Path $generatedExcel) {
-    Copy-Item -Path $generatedExcel -Destination $workspaceExcel -Force
-    Write-Host "Excel copied: $workspaceExcel"
+    Log-Message("MySQL insert failed: $($_.Exception.Message)")
+    throw
 }
-else {
-    Write-Host "ERROR: Excel file not found: $generatedExcel"
-}
+finally {
+    if ($command) {
+        $command.Dispose()
+    }
 
-if (Test-Path $outputFile) {
-    Copy-Item -Path $outputFile -Destination $workspaceOutput -Force
-    Write-Host "Output file copied: $workspaceOutput"
-}
-else {
-    Write-Host "ERROR: Output file not found: $outputFile"
-}
+    if ($conn) {
+        if ($conn.State -eq "Open") {
+            $conn.Close()
+        }
 
-Write-Host "Files in workspace artifact folder:"
+        $conn.Dispose()
+    }
 
-Get-ChildItem -Path $artifactFolder | ForEach-Object {
-    Write-Host "File: $($_.FullName)"
+    Write-Host "========== MySQL Insert Finished =========="
 }
-
-Write-Host "******** End copy to workspace path ********"
