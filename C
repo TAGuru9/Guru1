@@ -1,0 +1,34 @@
+Write-Host "******** Start copy to workspace path ********"
+
+$artifactFolder = Join-Path $env:WORKSPACE "artifacts"
+
+if (-not (Test-Path $artifactFolder)) {
+    New-Item -Path $artifactFolder -ItemType Directory -Force | Out-Null
+}
+
+$workspaceExcel = Join-Path $artifactFolder (Split-Path $generatedExcel -Leaf)
+$workspaceOutput = Join-Path $artifactFolder (Split-Path $outputFile -Leaf)
+
+if (Test-Path $generatedExcel) {
+    Copy-Item -Path $generatedExcel -Destination $workspaceExcel -Force
+    Write-Host "Excel copied: $workspaceExcel"
+}
+else {
+    Write-Host "ERROR: Excel file not found: $generatedExcel"
+}
+
+if (Test-Path $outputFile) {
+    Copy-Item -Path $outputFile -Destination $workspaceOutput -Force
+    Write-Host "Output file copied: $workspaceOutput"
+}
+else {
+    Write-Host "ERROR: Output file not found: $outputFile"
+}
+
+Write-Host "Files in workspace artifact folder:"
+
+Get-ChildItem -Path $artifactFolder | ForEach-Object {
+    Write-Host "File: $($_.FullName)"
+}
+
+Write-Host "******** End copy to workspace path ********"
