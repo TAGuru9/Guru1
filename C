@@ -1,76 +1,45 @@
-$connectionString = "server=$sMySQLHost;port=$dbport;uid=$sMySQLUserName;pwd=$sMySQLPW;database=$sMySQLDB;"
+Write-Host "========== JENKINS FILE UPLOAD =========="
+Write-Host "Node: $env:COMPUTERNAME"
+Write-Host "Workspace: $env:WORKSPACE"
+Write-Host "Original filename: $env:FileName"
 
-$conn = $null
-$command = $null
+# Jenkins stores the upload using the parameter name
+$jenkinsUploadedFile = Join-Path $env:WORKSPACE "FileName"
 
-try {
-    Write-Host "========== MySQL Insert Started =========="
-    Write-Host "MySQL server: $sMySQLHost"
-    Write-Host "MySQL port: $dbport"
-    Write-Host "MySQL database: $sMySQLDB"
-    Write-Host "MySQL user: $sMySQLUserName"
-    # Do not print the password
+if (-not (Test-Path -LiteralPath $jenkinsUploadedFile)) {
+    Write-Host "Files found in workspace:"
 
-    $conn = New-Object MySql.Data.MySqlClient.MySqlConnection(
-        $connectionString
-    )
-
-    $conn.Open()
-
-    Write-Host "MySQL connection state: $($conn.State)"
-
-    if ($conn.State -ne "Open") {
-        throw "MySQL connection was not opened."
-    }
-
-    $command = $conn.CreateCommand()
-    $command.CommandText = $Query
-    $command.CommandTimeout = 60
-
-    Write-Host "Executing MySQL insert..."
-    Write-Host "Query: $Query"
-
-    # This line was commented out in your current code
-    $RowsInserted = $command.ExecuteNonQuery()
-
-    Write-Host "Rows inserted: $RowsInserted"
-
-    if ($RowsInserted -gt 0) {
-        Write-Host "SUCCESS: Run information added to TA MySQL."
-        Log-Message("Inserted rows into TA MySQL: $RowsInserted")
-    }
-    else {
-        throw "The query completed but inserted zero rows."
-    }
-}
-catch {
-    Write-Host "========== MYSQL ERROR ==========" -ForegroundColor Red
-    Write-Host "Message: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host "Exception type: $($_.Exception.GetType().FullName)"
-    
-    if ($_.Exception.InnerException) {
-        Write-Host "Inner error: $($_.Exception.InnerException.Message)" `
-            -ForegroundColor Red
-    }
-
-    Write-Host "Query attempted: $Query"
-    Write-Host "=================================" -ForegroundColor Red
-
-    Log-Message("MySQL insert failed: $($_.Exception.Message)")
-    throw
-}
-finally {
-    if ($command) {
-        $command.Dispose()
-    }
-
-    if ($conn) {
-        if ($conn.State -eq "Open") {
-            $conn.Close()
+    Get-ChildItem -Path $env:WORKSPACE -Recurse -File |
+        ForEach-Object {
+            Write-Host $_.FullName
         }
 
-        $conn.Dispose()
-    }
-
-    Write-Host "========== MySQL Insert Finished =========="
+    throw "Uploaded file was not found: $jenkinsUploadedFile"
 }
+
+# Restore the original uploaded filename
+$originalFileName = Split-Path $env:FileName -Leaf
+
+if ([string]::IsNullOrWhiteSpace($originalFileName)) {
+    $originalFileName = "UploadedInput.xlsx"
+}
+
+# Create input directory on the Jenkins node
+$nodeInputFolder = Join-Path $env:WORKSPACE "input"
+
+if (-not (Test-Path -LiteralPath $nodeInputFolder)) {
+    New-Item -Path $nodeInputFolder `
+             -ItemType Directory `
+             -Force | Out-Null
+}
+
+$nodeInputFile = Join-Path $nodeInputFolder $originalFileName
+
+# Copy uploaded file to the node input folder
+Copy-Item -LiteralPath $jenkinsUploadedFile -Destination $nodeInputFile -Force
+
+Write-Host "Uploaded file copied successfully."
+Write-Host "Source: $jenkinsUploadedFile"
+Write-Host "Node file: $nodeInputFile"
+Write-Host "File size: $((Get-Item $nodeInputFile).Length) bytes"
+Write-Host "========================================="
