@@ -1,56 +1,42 @@
-;WITH CorporateProducts AS (
-    SELECT cp.AL_ITEM_ID
-    FROM [amf_isqat_db].[td].[ALL_LISTS] cp
-    JOIN [amf_isqat_db].[td].[ALL_LISTS] root
-        ON root.AL_ITEM_ID = cp.AL_FATHER_ID
-    WHERE cp.AL_DESCRIPTION = '01. Corporate Products'
-      AND root.AL_DESCRIPTION = 'Subject'
-),
-Products AS (
-    SELECT
-        p.AL_ITEM_ID AS product_id,
-        p.AL_DESCRIPTION AS application_product
-    FROM [amf_isqat_db].[td].[ALL_LISTS] p
-    JOIN CorporateProducts cp
-        ON p.AL_FATHER_ID = cp.AL_ITEM_ID
-),
-ProductFolders AS (
-    -- Start with each application/product folder
-    SELECT
-        p.product_id,
-        p.product_id AS folder_id
-    FROM Products p
+DECLARE @ApplicationColumn sysname;
+DECLARE @Sql nvarchar(max);
 
-    UNION ALL
+SELECT @ApplicationColumn = SF_COLUMN_NAME
+FROM [amf_isqat_db].[td].[SYSTEM_FIELD]
+WHERE SF_TABLE_NAME = 'TEST'
+  AND SF_USER_LABEL = 'Application';
 
-    -- Include every subfolder beneath that product
-    SELECT
-        pf.product_id,
-        child.AL_ITEM_ID
-    FROM ProductFolders pf
-    JOIN [amf_isqat_db].[td].[ALL_LISTS] child
-        ON child.AL_FATHER_ID = pf.folder_id
-)
+IF @ApplicationColumn IS NULL
+BEGIN
+    THROW 50001,
+        'Application field not found. Check its label in SYSTEM_FIELD.',
+        1;
+END;
+
+SET @Sql = N'
 SELECT
-    p.application_product,
-    SUM(
-        CASE
-            WHEN t.TS_NAME LIKE 'TA[_]%'
-            THEN 1 ELSE 0
-        END
-    ) AS automated_count,
-    SUM(
-        CASE
-            WHEN t.TS_TEST_ID IS NOT NULL
-             AND (t.TS_NAME NOT LIKE 'TA[_]%' OR t.TS_NAME IS NULL)
-            THEN 1 ELSE 0
-        END
-    ) AS manual_count
-FROM Products p
-JOIN ProductFolders pf
-    ON pf.product_id = p.product_id
-LEFT JOIN [amf_isqat_db].[td].[TEST] t
-    ON t.TS_SUBJECT = pf.folder_id
-GROUP BY p.product_id, p.application_product
-ORDER BY p.application_product
-OPTION (MAXRECURSION 0);
+    COALESCE(
+        NULLIF(
+            LTRIM(RTRIM(CONVERT(nvarchar(255), t.'
+            + QUOTENAME(@ApplicationColumn) + N'))),
+            N''''
+        ),
+        N''(Blank)''
+    ) AS application,
+    SUM(CASE WHEN t.TS_NAME LIKE ''TA[_]%'' THEN 1 ELSE 0 END)
+        AS automated_count,
+    SUM(CASE WHEN t.TS_NAME LIKE ''TA[_]%'' THEN 0 ELSE 1 END)
+        AS manual_count
+FROM [amf_isqat_db].[td].[TEST] t
+GROUP BY
+    COALESCE(
+        NULLIF(
+            LTRIM(RTRIM(CONVERT(nvarchar(255), t.'
+            + QUOTENAME(@ApplicationColumn) + N'))),
+            N''''
+        ),
+        N''(Blank)''
+    )
+ORDER BY application;';
+
+EXEC sys.sp_executesql @Sql;
