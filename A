@@ -1,0 +1,66 @@
+;WITH Folders AS (
+    SELECT
+        AL_ITEM_ID AS folder_id,
+        AL_FATHER_ID AS parent_folder_id,
+        CAST(AL_DESCRIPTION AS nvarchar(255)) AS folder_name,
+        CAST(AL_DESCRIPTION AS nvarchar(max)) AS folder_path,
+        0 AS folder_level
+    FROM ALL_LISTS
+    WHERE AL_DESCRIPTION = 'Subject'
+
+    UNION ALL
+
+    SELECT
+        c.AL_ITEM_ID,
+        c.AL_FATHER_ID,
+        CAST(c.AL_DESCRIPTION AS nvarchar(255)),
+        CAST(f.folder_path + N' / ' + c.AL_DESCRIPTION AS nvarchar(max)),
+        f.folder_level + 1
+    FROM ALL_LISTS c
+    JOIN Folders f ON c.AL_FATHER_ID = f.folder_id
+),
+DirectCounts AS (
+    SELECT
+        TS_SUBJECT AS folder_id,
+        SUM(CASE WHEN TS_NAME LIKE 'TA[_]%' THEN 1 ELSE 0 END) AS automated,
+        SUM(CASE WHEN TS_NAME LIKE 'TA[_]%' THEN 0 ELSE 1 END) AS manual,
+        COUNT(*) AS total
+    FROM TEST
+    GROUP BY TS_SUBJECT
+),
+FolderAncestors AS (
+    SELECT folder_id AS ancestor_id, folder_id AS descendant_id
+    FROM Folders
+
+    UNION ALL
+
+    SELECT f.parent_folder_id, fa.descendant_id
+    FROM FolderAncestors fa
+    JOIN Folders f ON f.folder_id = fa.ancestor_id
+    WHERE f.parent_folder_id IN (SELECT folder_id FROM Folders)
+),
+RollupCounts AS (
+    SELECT
+        fa.ancestor_id AS folder_id,
+        SUM(COALESCE(dc.automated, 0)) AS automated,
+        SUM(COALESCE(dc.manual, 0)) AS manual,
+        SUM(COALESCE(dc.total, 0)) AS total
+    FROM FolderAncestors fa
+    LEFT JOIN DirectCounts dc ON dc.folder_id = fa.descendant_id
+    GROUP BY fa.ancestor_id
+)
+SELECT
+    f.folder_level,
+    f.folder_name,
+    f.folder_path,
+    COALESCE(d.automated, 0) AS direct_automated,
+    COALESCE(d.manual, 0) AS direct_manual,
+    COALESCE(d.total, 0) AS direct_total,
+    COALESCE(r.automated, 0) AS automated_including_subfolders,
+    COALESCE(r.manual, 0) AS manual_including_subfolders,
+    COALESCE(r.total, 0) AS total_including_subfolders
+FROM Folders f
+LEFT JOIN DirectCounts d ON d.folder_id = f.folder_id
+LEFT JOIN RollupCounts r ON r.folder_id = f.folder_id
+ORDER BY f.folder_path
+OPTION (MAXRECURSION 0);
