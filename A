@@ -1,13 +1,25 @@
-;WITH Folders AS (
+;WITH BitsRoot AS (
+    SELECT bits.AL_ITEM_ID, bits.AL_FATHER_ID, bits.AL_DESCRIPTION
+    FROM [amf_isqat_db].[td].[ALL_LISTS] bits
+    JOIN [amf_isqat_db].[td].[ALL_LISTS] parent
+        ON parent.AL_ITEM_ID = bits.AL_FATHER_ID
+    JOIN [amf_isqat_db].[td].[ALL_LISTS] root
+        ON root.AL_ITEM_ID = parent.AL_FATHER_ID
+    WHERE bits.AL_DESCRIPTION = 'BITS'
+      AND parent.AL_DESCRIPTION = '01. Corporate Products'
+      AND root.AL_DESCRIPTION = 'Subject'
+),
+Folders AS (
     SELECT
-        a.AL_ITEM_ID AS folder_id,
-        a.AL_FATHER_ID AS parent_folder_id,
-        CAST(a.AL_DESCRIPTION AS nvarchar(255)) AS folder_name,
-        CAST(NULL AS nvarchar(max)) AS parent_folder_path,
-        CAST(a.AL_DESCRIPTION AS nvarchar(max)) AS full_folder_path,
-        0 AS folder_level
-    FROM [amf_isqat_db].[td].[ALL_LISTS] a
-    WHERE a.AL_DESCRIPTION = 'Subject'
+        b.AL_ITEM_ID AS folder_id,
+        b.AL_FATHER_ID AS parent_folder_id,
+        CAST(b.AL_DESCRIPTION AS nvarchar(255)) AS folder_name,
+        CAST('Subject / 01. Corporate Products' AS nvarchar(max))
+            AS parent_folder_path,
+        CAST('Subject / 01. Corporate Products / BITS' AS nvarchar(max))
+            AS full_folder_path,
+        0 AS level_under_bits
+    FROM BitsRoot b
 
     UNION ALL
 
@@ -17,17 +29,20 @@
         CAST(c.AL_DESCRIPTION AS nvarchar(255)),
         CAST(f.full_folder_path AS nvarchar(max)),
         CAST(f.full_folder_path + N' / ' + c.AL_DESCRIPTION AS nvarchar(max)),
-        f.folder_level + 1
+        f.level_under_bits + 1
     FROM [amf_isqat_db].[td].[ALL_LISTS] c
     JOIN Folders f ON c.AL_FATHER_ID = f.folder_id
 ),
 DirectCounts AS (
     SELECT
         t.TS_SUBJECT AS folder_id,
-        SUM(CASE WHEN t.TS_NAME LIKE 'TA[_]%' THEN 1 ELSE 0 END) AS automated,
-        SUM(CASE WHEN t.TS_NAME LIKE 'TA[_]%' THEN 0 ELSE 1 END) AS manual,
+        SUM(CASE WHEN t.TS_NAME LIKE 'TA[_]%' THEN 1 ELSE 0 END)
+            AS automated,
+        SUM(CASE WHEN t.TS_NAME LIKE 'TA[_]%' THEN 0 ELSE 1 END)
+            AS manual,
         COUNT(*) AS total
     FROM [amf_isqat_db].[td].[TEST] t
+    JOIN Folders f ON f.folder_id = t.TS_SUBJECT
     GROUP BY t.TS_SUBJECT
 ),
 FolderAncestors AS (
@@ -39,9 +54,7 @@ FolderAncestors AS (
     SELECT f.parent_folder_id, fa.descendant_id
     FROM FolderAncestors fa
     JOIN Folders f ON f.folder_id = fa.ancestor_id
-    WHERE EXISTS (
-        SELECT 1 FROM Folders p WHERE p.folder_id = f.parent_folder_id
-    )
+    WHERE f.level_under_bits > 0
 ),
 RollupCounts AS (
     SELECT
@@ -54,15 +67,13 @@ RollupCounts AS (
     GROUP BY fa.ancestor_id
 )
 SELECT
-    f.folder_id,
-    f.parent_folder_id,
-    f.folder_level,
+    f.level_under_bits,
     f.folder_name,
     f.parent_folder_path,
     f.full_folder_path,
-    COALESCE(d.automated, 0) AS direct_automated,
-    COALESCE(d.manual, 0) AS direct_manual,
-    COALESCE(d.total, 0) AS direct_total,
+    COALESCE(d.automated, 0) AS folder_automated,
+    COALESCE(d.manual, 0) AS folder_manual,
+    COALESCE(d.total, 0) AS folder_total,
     COALESCE(r.automated, 0) AS automated_including_subfolders,
     COALESCE(r.manual, 0) AS manual_including_subfolders,
     COALESCE(r.total, 0) AS total_including_subfolders
