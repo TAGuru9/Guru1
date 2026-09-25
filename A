@@ -2,9 +2,9 @@ DECLARE @ApplicationColumn sysname;
 DECLARE @Sql nvarchar(max);
 
 SELECT @ApplicationColumn = SF_COLUMN_NAME
-FROM [amf_isqat_db].[td].[SYSTEM_FIELD]
+FROM [td].[SYSTEM_FIELD]
 WHERE SF_TABLE_NAME = 'TEST'
-  AND SF_USER_LABEL = 'Application';
+  AND LTRIM(RTRIM(SF_USER_LABEL)) = 'Application';
 
 IF @ApplicationColumn IS NULL
 BEGIN
@@ -27,7 +27,7 @@ SELECT
         AS automated_count,
     SUM(CASE WHEN t.TS_NAME LIKE ''TA[_]%'' THEN 0 ELSE 1 END)
         AS manual_count
-FROM [amf_isqat_db].[td].[TEST] t
+FROM [td].[TEST] t
 GROUP BY
     COALESCE(
         NULLIF(
