@@ -1,84 +1,9 @@
-;WITH BitsRoot AS (
-    SELECT bits.AL_ITEM_ID, bits.AL_FATHER_ID, bits.AL_DESCRIPTION
-    FROM [amf_isqat_db].[td].[ALL_LISTS] bits
-    JOIN [amf_isqat_db].[td].[ALL_LISTS] parent
-        ON parent.AL_ITEM_ID = bits.AL_FATHER_ID
-    JOIN [amf_isqat_db].[td].[ALL_LISTS] root
-        ON root.AL_ITEM_ID = parent.AL_FATHER_ID
-    WHERE bits.AL_DESCRIPTION = 'BITS'
-      AND parent.AL_DESCRIPTION = '01. Corporate Products'
-      AND root.AL_DESCRIPTION = 'Subject'
-),
-Folders AS (
-    SELECT
-        b.AL_ITEM_ID AS folder_id,
-        b.AL_FATHER_ID AS parent_folder_id,
-        CAST(b.AL_DESCRIPTION AS nvarchar(255)) AS folder_name,
-        CAST('Subject / 01. Corporate Products' AS nvarchar(max))
-            AS parent_folder_path,
-        CAST('Subject / 01. Corporate Products / BITS' AS nvarchar(max))
-            AS full_folder_path,
-        0 AS level_under_bits
-    FROM BitsRoot b
-
-    UNION ALL
-
-    SELECT
-        c.AL_ITEM_ID,
-        c.AL_FATHER_ID,
-        CAST(c.AL_DESCRIPTION AS nvarchar(255)),
-        CAST(f.full_folder_path AS nvarchar(max)),
-        CAST(f.full_folder_path + N' / ' + c.AL_DESCRIPTION AS nvarchar(max)),
-        f.level_under_bits + 1
-    FROM [amf_isqat_db].[td].[ALL_LISTS] c
-    JOIN Folders f ON c.AL_FATHER_ID = f.folder_id
-),
-DirectCounts AS (
-    SELECT
-        t.TS_SUBJECT AS folder_id,
-        SUM(CASE WHEN t.TS_NAME LIKE 'TA[_]%' THEN 1 ELSE 0 END)
-            AS automated,
-        SUM(CASE WHEN t.TS_NAME LIKE 'TA[_]%' THEN 0 ELSE 1 END)
-            AS manual,
-        COUNT(*) AS total
-    FROM [amf_isqat_db].[td].[TEST] t
-    JOIN Folders f ON f.folder_id = t.TS_SUBJECT
-    GROUP BY t.TS_SUBJECT
-),
-FolderAncestors AS (
-    SELECT folder_id AS ancestor_id, folder_id AS descendant_id
-    FROM Folders
-
-    UNION ALL
-
-    SELECT f.parent_folder_id, fa.descendant_id
-    FROM FolderAncestors fa
-    JOIN Folders f ON f.folder_id = fa.ancestor_id
-    WHERE f.level_under_bits > 0
-),
-RollupCounts AS (
-    SELECT
-        fa.ancestor_id AS folder_id,
-        SUM(COALESCE(d.automated, 0)) AS automated,
-        SUM(COALESCE(d.manual, 0)) AS manual,
-        SUM(COALESCE(d.total, 0)) AS total
-    FROM FolderAncestors fa
-    LEFT JOIN DirectCounts d ON d.folder_id = fa.descendant_id
-    GROUP BY fa.ancestor_id
-)
 SELECT
-    f.level_under_bits,
-    f.folder_name,
-    f.parent_folder_path,
-    f.full_folder_path,
-    COALESCE(d.automated, 0) AS folder_automated,
-    COALESCE(d.manual, 0) AS folder_manual,
-    COALESCE(d.total, 0) AS folder_total,
-    COALESCE(r.automated, 0) AS automated_including_subfolders,
-    COALESCE(r.manual, 0) AS manual_including_subfolders,
-    COALESCE(r.total, 0) AS total_including_subfolders
+    f.full_folder_path AS folder_path,
+    COALESCE(d.manual, 0) AS manual_count,
+    COALESCE(d.automated, 0) AS automated_count
 FROM Folders f
-LEFT JOIN DirectCounts d ON d.folder_id = f.folder_id
-LEFT JOIN RollupCounts r ON r.folder_id = f.folder_id
+LEFT JOIN DirectCounts d
+    ON d.folder_id = f.folder_id
 ORDER BY f.full_folder_path
 OPTION (MAXRECURSION 0);
