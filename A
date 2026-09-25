@@ -1,28 +1,29 @@
 ;WITH Folders AS (
     SELECT
-        a.AL_ITEM_ID AS folder_id,
-        CAST(a.AL_DESCRIPTION AS nvarchar(max)) AS folder_path
-    FROM [amf_isqat_db].[td].[ALL_LISTS] a
-    WHERE a.AL_DESCRIPTION = 'Subject'
+        cf.CF_ITEM_ID AS folder_id,
+        CAST(cf.CF_ITEM_NAME AS nvarchar(max)) AS folder_path
+    FROM [amf_isqat_db].[td].[CYCL_FOLD] cf
+    WHERE cf.CF_FATHER_ID IS NULL
+       OR cf.CF_FATHER_ID = 0
 
     UNION ALL
 
     SELECT
-        child.AL_ITEM_ID,
+        child.CF_ITEM_ID,
         CAST(
-            f.folder_path + N' / ' + child.AL_DESCRIPTION
+            f.folder_path + N' / ' + child.CF_ITEM_NAME
             AS nvarchar(max)
         )
-    FROM [amf_isqat_db].[td].[ALL_LISTS] child
+    FROM [amf_isqat_db].[td].[CYCL_FOLD] child
     JOIN Folders f
-        ON child.AL_FATHER_ID = f.folder_id
+        ON child.CF_FATHER_ID = f.folder_id
 )
 SELECT
     f.folder_path,
     SUM(
         CASE
-            WHEN t.TS_TEST_ID IS NOT NULL
-             AND t.TS_NAME NOT LIKE 'TA[_]%'
+            WHEN tc.TC_TESTCYCL_ID IS NOT NULL
+             AND (t.TS_NAME NOT LIKE 'TA[_]%' OR t.TS_NAME IS NULL)
             THEN 1 ELSE 0
         END
     ) AS manual_count,
@@ -33,8 +34,12 @@ SELECT
         END
     ) AS automated_count
 FROM Folders f
+LEFT JOIN [amf_isqat_db].[td].[CYCLE] cy
+    ON cy.CY_FOLDER_ID = f.folder_id
+LEFT JOIN [amf_isqat_db].[td].[TESTCYCL] tc
+    ON tc.TC_CYCLE_ID = cy.CY_CYCLE_ID
 LEFT JOIN [amf_isqat_db].[td].[TEST] t
-    ON t.TS_SUBJECT = f.folder_id
+    ON t.TS_TEST_ID = tc.TC_TEST_ID
 GROUP BY f.folder_id, f.folder_path
 ORDER BY f.folder_path
 OPTION (MAXRECURSION 0);
