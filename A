@@ -1,25 +1,9 @@
-;WITH BitsRoot AS (
+;WITH Folders AS (
     SELECT
-        bits.AL_ITEM_ID,
-        bits.AL_FATHER_ID,
-        bits.AL_DESCRIPTION
-    FROM [amf_isqat_db].[td].[ALL_LISTS] bits
-    JOIN [amf_isqat_db].[td].[ALL_LISTS] parent
-        ON parent.AL_ITEM_ID = bits.AL_FATHER_ID
-    JOIN [amf_isqat_db].[td].[ALL_LISTS] root
-        ON root.AL_ITEM_ID = parent.AL_FATHER_ID
-    WHERE bits.AL_DESCRIPTION = 'BITS'
-      AND parent.AL_DESCRIPTION = '01. Corporate Products'
-      AND root.AL_DESCRIPTION = 'Subject'
-),
-Folders AS (
-    SELECT
-        b.AL_ITEM_ID AS folder_id,
-        CAST(
-            N'Subject / 01. Corporate Products / BITS'
-            AS nvarchar(max)
-        ) AS folder_path
-    FROM BitsRoot b
+        a.AL_ITEM_ID AS folder_id,
+        CAST(a.AL_DESCRIPTION AS nvarchar(max)) AS folder_path
+    FROM [amf_isqat_db].[td].[ALL_LISTS] a
+    WHERE a.AL_DESCRIPTION = 'Subject'
 
     UNION ALL
 
