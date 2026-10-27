@@ -1,13 +1,31 @@
-* Yes – Selected for automation
-* No – Not selected for automation
-* Under Review – The team is assessing it
-* On Hold – Selected, but waiting on a dependency or decision
+I wanted to share an observation regarding the regression automation reported by the vendor and propose specific validation steps so we can confirm the current level of readiness\.
 
-Column I – Automation Status
-I’d rename “Automated” to Automation Status so you can track progress:
+The vendor has reported that **44,434 of 100,206 test cases** in the overall regression suite have been automated, representing **44\.34% coverage**\. For the core regression suite, the reported count is **952 of 1,266 test cases**, or **75\.2% coverage**\.
 
-* Not Started
-* In Progress
-* Completed
-* Blocked
-* Not Applicable
+The vendor has also indicated that some scripts cannot currently be executed because they do not fully align with our required format and guidelines\. To establish a clear distinction between scripts that have been created and scripts that are execution\-ready, I recommend requesting the following deliverables from the vendor:
+
+- A complete inventory of the reported automated scripts, including the associated test case ID, business area, execution status, and current owner\.
+- A reconciliation of the reported totals against the overall and core regression suites, including any duplicate, obsolete, excluded, or partially automated test cases\.
+- A status breakdown showing the number of scripts that are:
+  - Created but not reviewed\.
+  - Reviewed and compliant with our standards\.
+  - Ready for execution\.
+  - Successfully executed and validated\.
+  - Blocked or requiring rework\.
+- A defect or gap log for all scripts that cannot currently be executed, including the specific formatting or guideline issue, impact, corrective action, owner, and target completion date\.
+- A remediation plan with named vendor and internal owners, milestones, dependencies, and a committed date for completing the required updates\.
+- Execution evidence for the corrected scripts, including execution date, environment, test data, pass/fail result, defect references, and any applicable logs or screenshots\.
+- A final coverage report that separately identifies scripts created, scripts compliant with our standards, scripts successfully executed, and scripts validated by the internal team\.
+
+For validation, we should select a representative sample from both the overall and core regression suites and independently confirm that each script:
+
+1. Maps to an approved test case\.
+2. Follows the required automation format and guidelines\.
+3. Executes successfully in the agreed test environment\.
+4. Produces the expected result\.
+5. Includes sufficient evidence to support the reported status\.
+6. Has any failures or defects documented and assigned to an owner\.
+
+I recommend that the vendor submit the inventory, reconciliation, gap log, and remediation plan before the next status review\. After the updates are completed, the vendor should execute the corrected scripts and provide the evidence package for internal validation\. We can then update the reported automation percentage based on scripts that are both compliant and successfully executed, rather than counting scripts that have only been created\.
+
+Please let me know whether you would like me to coordinate this request with the vendor and schedule a review of the deliverables, owners, and target dates\.
