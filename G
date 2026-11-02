@@ -1,0 +1,81 @@
+WITH Folders AS (
+    SELECT
+        cf.CF_ITEM_ID AS folder_id,
+        CAST(cf.CF_ITEM_NAME AS NVARCHAR(MAX)) AS folder_path
+    FROM [amfc_isqat_db].[td].CYCL_FOLD cf
+    WHERE cf.CF_FATHER_ID IS NULL
+       OR cf.CF_FATHER_ID = 0
+
+    UNION ALL
+
+    SELECT
+        child.CF_ITEM_ID,
+        CAST(
+            f.folder_path + N' / ' + child.CF_ITEM_NAME
+            AS NVARCHAR(MAX)
+        )
+    FROM [amfc_isqat_db].[td].CYCL_FOLD child
+    INNER JOIN Folders f
+        ON child.CF_FATHER_ID = f.folder_id
+)
+
+SELECT
+    f.folder_path,
+
+    YEAR(r.RN_EXECUTION_DATE) AS execution_year,
+
+    MONTH(r.RN_EXECUTION_DATE) AS execution_month,
+
+    DATENAME(MONTH, r.RN_EXECUTION_DATE) AS month_name,
+
+    COUNT(r.RN_RUN_ID) AS total_executions,
+
+    SUM(
+        CASE
+            WHEN t.TS_NAME LIKE 'TA[_]%'
+            THEN 1 ELSE 0
+        END
+    ) AS automated_count,
+
+    SUM(
+        CASE
+            WHEN t.TS_NAME NOT LIKE 'TA[_]%'
+                 OR t.TS_NAME IS NULL
+            THEN 1 ELSE 0
+        END
+    ) AS manual_count
+
+FROM Folders f
+
+INNER JOIN [amfc_isqat_db].[td].CYCLE cy
+    ON cy.CY_FOLDER_ID = f.folder_id
+
+INNER JOIN [amfc_isqat_db].[td].TESTCYCL tc
+    ON tc.TC_CYCLE_ID = cy.CY_CYCLE_ID
+
+LEFT JOIN [amfc_isqat_db].[td].TEST t
+    ON t.TS_TEST_ID = tc.TC_TEST_ID
+
+INNER JOIN [amfc_isqat_db].[td].RUN r
+    ON r.RN_TESTCYCL_ID = tc.TC_TESTCYCL_ID
+
+WHERE
+    f.folder_path NOT LIKE N'Trash%'
+    AND f.folder_path NOT LIKE N'% / Trash%'
+    AND f.folder_path LIKE N'%2026%'
+    AND r.RN_EXECUTION_DATE >= '20260101'
+    AND r.RN_EXECUTION_DATE < '20270101'
+
+GROUP BY
+    f.folder_id,
+    f.folder_path,
+    YEAR(r.RN_EXECUTION_DATE),
+    MONTH(r.RN_EXECUTION_DATE),
+    DATENAME(MONTH, r.RN_EXECUTION_DATE)
+
+ORDER BY
+    execution_year DESC,
+    execution_month DESC,
+    f.folder_path
+
+OPTION (MAXRECURSION 0);
