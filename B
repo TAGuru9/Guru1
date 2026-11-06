@@ -1,85 +1,54 @@
-WITH Folders AS (
-    SELECT
-        cf.CF_ITEM_ID AS folder_id,
-        CAST(cf.CF_ITEM_NAME AS NVARCHAR(MAX)) AS folder_path
-    FROM [amfc_isqat_db].[td].CYCL_FOLD cf
-    WHERE cf.CF_FATHER_ID IS NULL
-       OR cf.CF_FATHER_ID = 0
 
-    UNION ALL
+init.fields.ClickIt(menu.lnkMenu, "Click Menu");
+init.fields.ClickIt(menu.lnkAdmin, "Administration");
 
-    SELECT
-        child.CF_ITEM_ID,
-        CAST(
-            f.folder_path + N' / ' + child.CF_ITEM_NAME
-            AS NVARCHAR(MAX)
-        )
-    FROM [amfc_isqat_db].[td].CYCL_FOLD child
-    INNER JOIN Folders f
-        ON child.CF_FATHER_ID = f.folder_id
-)
+// Administration submenu locator
+By adminOptions = By.xpath(
+    "//a[@id='_topmenulink_Menu_Administration']" +
+    "/following-sibling::ul[@role='menu']//a"
+);
 
-SELECT
-    f.folder_path,
+// Get all submenu items
+List<WebElement> orgMenu =
+    init.driver.findElements(adminOptions);
 
-    YEAR(r.RN_EXECUTION_DATE) AS execution_year,
+boolean orgFound = false;
 
-    MONTH(r.RN_EXECUTION_DATE) AS execution_month,
+for (WebElement item : orgMenu) {
 
-    DATENAME(MONTH, r.RN_EXECUTION_DATE) AS month_name,
+    String menuName = item.getText().trim();
 
-    CAST(r.RN_EXECUTION_DATE AS DATE) AS execution_date,
+    System.out.println("Admin Menu: " + menuName);
 
-    SUM(
-        CASE
-            WHEN tc.TC_TESTCYCL_ID IS NOT NULL
-             AND (
-                 t.TS_NAME NOT LIKE 'TA[_]%'
-                 OR t.TS_NAME IS NULL
-             )
-            THEN 1 ELSE 0
-        END
-    ) AS manual_count,
+    if (menuName.equalsIgnoreCase("Organization")
+            && item.isDisplayed()) {
 
-    SUM(
-        CASE
-            WHEN t.TS_NAME LIKE 'TA[_]%'
-            THEN 1 ELSE 0
-        END
-    ) AS automated_count
+        init.fields.ClickIt(item, "Organization");
 
-FROM Folders f
+        init.reporter.Event(
+            "PASS",
+            "Organization",
+            "Organization menu is present and clicked"
+        );
 
-LEFT JOIN [amfc_isqat_db].[td].CYCLE cy
-    ON cy.CY_FOLDER_ID = f.folder_id
+        init.reporter.AttachScreenShotToTest(init.driver);
 
-LEFT JOIN [amfc_isqat_db].[td].TESTCYCL tc
-    ON tc.TC_CYCLE_ID = cy.CY_CYCLE_ID
+        orgFound = true;
+        break;
+    }
+}
 
-LEFT JOIN [amfc_isqat_db].[td].TEST t
-    ON t.TS_TEST_ID = tc.TC_TEST_ID
+if (!orgFound) {
 
-INNER JOIN [amfc_isqat_db].[td].RUN r
-    ON r.RN_TESTCYCL_ID = tc.TC_TESTCYCL_ID
+    init.reporter.Event(
+        "INFO",
+        "Organization Access",
+        "Organization menu is not available in this environment"
+    );
 
-WHERE
-    f.folder_path NOT LIKE N'Trash%'
-    AND f.folder_path NOT LIKE N'% / Trash%'
-    AND (
-        f.folder_path LIKE N'%2026%'
-        OR f.folder_path LIKE N'%/2026%'
-    )
+    init.reporter.AttachScreenShotToTest(init.driver);
 
-GROUP BY
-    f.folder_id,
-    f.folder_path,
-    YEAR(r.RN_EXECUTION_DATE),
-    MONTH(r.RN_EXECUTION_DATE),
-    DATENAME(MONTH, r.RN_EXECUTION_DATE),
-    CAST(r.RN_EXECUTION_DATE AS DATE)
-
-ORDER BY
-    f.folder_path,
-    execution_date DESC
-
-OPTION (MAXRECURSION 0);
+    System.out.println(
+        "Organization menu is not present for this user."
+    );
+}
