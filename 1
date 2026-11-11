@@ -1,15 +1,350 @@
 
-<div class="acfc-login-footer">
-  <div class="acfc-pipeline">
-    Build &nbsp; &#8250; &nbsp;
-    Test &nbsp; &#8250; &nbsp;
-    Automate &nbsp; &#8250; &nbsp;
-    Deploy
-  </div>
+/* =======================================
+ ACFC TA PRODUCTION JENKINS LOGIN
+ Animated Robot Theme - Version 2
+ CSS Only / Existing Jenkins Authentication
+======================================= */
 
-  <div class="acfc-footer-details">
-    ACFC Test Automation Team
-    <span> | </span>
-    Authorized access only
-  </div>
-</div>
+/* Welcome area */
+.acfc-login-intro {
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto 20px;
+  padding: 18px 12px;
+  box-sizing: border-box;
+  text-align: center;
+  color: #173d72;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: linear-gradient(
+    145deg, #f1faff, #e3f1ff
+  );
+  border: 1px solid #c4dff9;
+  border-radius: 18px;
+  animation: acfc-entrance 1s ease-out both;
+}
+
+@keyframes acfc-entrance {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ACFC branding */
+.acfc-brand-name {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.acfc-brand-name strong {
+  font-size: 30px;
+  color: #075da7;
+  font-weight: 800;
+}
+
+.acfc-brand-name span {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #35618c;
+}
+
+/* Robot floating scene */
+.acfc-robot-scene {
+  position: relative;
+  width: 170px;
+  height: 195px;
+  margin: 10px auto;
+}
+
+.acfc-bot {
+  position: absolute;
+  top: 12px;
+  left: 10px;
+  width: 150px;
+  height: 175px;
+  animation: acfc-float 3.5s ease-in-out infinite;
+}
+
+@keyframes acfc-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+/* Robot antenna */
+.acfc-bot-antenna {
+  position: absolute;
+  width: 7px;
+  height: 25px;
+  background: #5fb9ed;
+  top: 0;
+  left: 72px;
+  border-radius: 5px;
+}
+
+.acfc-bot-antenna::before {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  top: -9px;
+  left: -5px;
+  border-radius: 50%;
+  background: #36e5b9;
+  box-shadow: 0 0 15px #36e5b9;
+  animation: acfc-pulse 2s infinite;
+}
+
+/* Robot head */
+.acfc-bot-head {
+  position: absolute;
+  top: 24px;
+  left: 14px;
+  width: 122px;
+  height: 88px;
+  box-sizing: border-box;
+  border: 4px solid #d7f6ff;
+  border-radius: 28px;
+  background: linear-gradient(
+    135deg, #e0f8ff, #69b5e5
+  );
+  box-shadow: 0 5px 15px rgba(20,90,160,.2);
+  z-index: 3;
+}
+
+/* Dark face */
+.acfc-bot-screen {
+  position: absolute;
+  inset: 12px 10px;
+  border-radius: 18px;
+  background: #102b53;
+}
+
+/* Animated eyes */
+.acfc-bot-eyes {
+  display: flex;
+  justify-content: space-around;
+  padding: 12px 12px 0;
+}
+
+.acfc-bot-eyes i {
+  display: block;
+  width: 13px;
+  height: 19px;
+  background: #4ceaff;
+  border-radius: 50%;
+  box-shadow: 0 0 9px #4ceaff;
+  animation: acfc-blink 5s infinite;
+}
+
+@keyframes acfc-blink {
+  0%, 43%, 47%, 100% {
+    transform: scaleY(1);
+  }
+  45% {
+    transform: scaleY(.12);
+  }
+}
+
+/* Smile */
+.acfc-bot-mouth {
+  width: 28px;
+  height: 12px;
+  margin: 5px auto 0;
+  border-bottom: 3px solid #4ceaff;
+  border-radius: 0 0 50% 50%;
+}
+
+/* Robot torso */
+.acfc-bot-body {
+  position: absolute;
+  top: 116px;
+  left: 32px;
+  width: 86px;
+  height: 55px;
+  border-radius: 17px;
+  background: linear-gradient(
+    135deg, #e0f8ff, #69b5e5
+  );
+  z-index: 2;
+}
+
+/* Glowing status check */
+.acfc-bot-check {
+  width: 30px;
+  height: 30px;
+  margin: 12px auto;
+  line-height: 30px;
+  text-align: center;
+  color: white;
+  font-size: 23px;
+  font-weight: bold;
+  border-radius: 8px;
+  background: #16bb9c;
+  box-shadow: 0 0 12px #38dcbc;
+  animation: acfc-pulse 2s infinite;
+}
+
+@keyframes acfc-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .5; }
+}
+
+/* Arms */
+.acfc-bot-arm {
+  position: absolute;
+  width: 19px;
+  height: 54px;
+  top: 115px;
+  background: #75c7ee;
+  border-radius: 12px;
+  z-index: 1;
+}
+
+.acfc-bot-arm.left {
+  left: 10px;
+  transform: rotate(25deg);
+}
+
+.acfc-bot-arm.right {
+  right: 8px;
+  transform-origin: center top;
+  animation: acfc-wave 2.5s ease-in-out infinite;
+}
+
+.acfc-bot-arm::after {
+  content: "";
+  position: absolute;
+  bottom: -5px;
+  left: -3px;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: #cef4ff;
+}
+
+@keyframes acfc-wave {
+  0%, 100% {
+    transform: rotate(-35deg);
+  }
+  50% {
+    transform: rotate(-105deg);
+  }
+}
+
+/* Robot feet */
+.acfc-bot-foot {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  top: 164px;
+  background: #75c7ee;
+  border-radius: 7px;
+}
+
+.acfc-bot-foot.left {
+  left: 48px;
+}
+
+.acfc-bot-foot.right {
+  right: 48px;
+}
+
+/* Title */
+.acfc-login-intro h2 {
+  font-size: 25px !important;
+  line-height: 1.3;
+  font-weight: 800;
+  color: #123e79;
+  margin: 14px 0 8px;
+}
+
+.acfc-login-intro p {
+  font-size: 15px !important;
+  color: #4d6885;
+  margin: 0 0 14px;
+}
+
+/* Pepper framework badges */
+.acfc-tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px;
+  margin: 12px 0;
+}
+
+.acfc-tools span {
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #135990;
+  background: #dceeff;
+  border: 1px solid #b4d9f8;
+  border-radius: 20px;
+}
+
+/* Assistant message */
+.acfc-message {
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #087d69;
+}
+
+/* Footer */
+.acfc-login-footer {
+  text-align: center;
+  padding: 16px 8px;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.acfc-pipeline {
+  font-size: 13px;
+  font-weight: 700;
+  color: #146caa;
+  margin-bottom: 10px;
+}
+
+.acfc-footer-details {
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  .acfc-login-intro {
+    padding: 12px 8px;
+  }
+
+  .acfc-login-intro h2 {
+    font-size: 21px !important;
+  }
+
+  .acfc-tools span {
+    font-size: 11px;
+  }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .acfc-login-intro,
+  .acfc-bot,
+  .acfc-bot-antenna::before,
+  .acfc-bot-eyes i,
+  .acfc-bot-check,
+  .acfc-bot-arm.right {
+    animation: none !important;
+  }
+}
