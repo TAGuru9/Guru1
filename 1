@@ -1,15 +1,335 @@
 
-<div class="acfc-login-footer">
-  <div class="acfc-pipeline">
-    Build &nbsp; &#8250; &nbsp;
-    Test &nbsp; &#8250; &nbsp;
-    Automate &nbsp; &#8250; &nbsp;
-    Deploy
-  </div>
 
-  <div class="acfc-footer-details">
-    ACFC Test Automation Team
-    <span> | </span>
-    Authorized access only
-  </div>
-</div>
+/* ACFC TA Production Animated Login */
+/* CSS-only animation, no scripts */
+
+/* Background */
+body.app-sign-in-register {
+  background: linear-gradient(
+    125deg,
+    #081d43,
+    #123c83,
+    #087dbb,
+    #352c86
+  ) !important;
+  background-size: 350% 350% !important;
+  animation: acfc-bg 18s ease infinite;
+}
+
+@keyframes acfc-bg {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Welcome area */
+.acfc-login-intro {
+  text-align: center;
+  padding: 12px 0 20px;
+  color: #193d72;
+  animation: acfc-enter 1s ease both;
+}
+
+.acfc-brand-name {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.acfc-brand-name strong {
+  font-size: 26px;
+  color: #0964a6;
+}
+
+.acfc-brand-name span {
+  font-size: 11px;
+  letter-spacing: 2px;
+  font-weight: bold;
+  color: #4b7294;
+}
+
+.acfc-login-intro h2 {
+  font-size: 24px;
+  line-height: 1.25;
+  font-weight: 800;
+  color: #123d78;
+  margin: 12px 0 7px;
+}
+
+.acfc-login-intro p {
+  font-size: 14px;
+  color: #536c85;
+  margin: 0 0 14px;
+}
+
+@keyframes acfc-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Robot scene */
+.acfc-robot-scene {
+  position: relative;
+  width: 165px;
+  height: 192px;
+  margin: 8px auto 4px;
+  filter: drop-shadow(0 9px 14px
+    rgba(23, 100, 180, .25));
+}
+
+.acfc-bot {
+  position: absolute;
+  width: 150px;
+  height: 177px;
+  left: 7px;
+  top: 5px;
+  animation: acfc-float 3.5s ease-in-out infinite;
+}
+
+@keyframes acfc-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-11px); }
+}
+
+/* Robot antenna */
+.acfc-bot-antenna {
+  position: absolute;
+  left: 71px;
+  top: 0;
+  width: 7px;
+  height: 22px;
+  background: #63bdec;
+  border-radius: 5px;
+}
+
+.acfc-bot-antenna::before {
+  content: "";
+  position: absolute;
+  top: -9px;
+  left: -5px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #29ecc5;
+  box-shadow: 0 0 15px #29ecc5;
+  animation: acfc-glow 2s infinite;
+}
+
+/* Head */
+.acfc-bot-head {
+  position: absolute;
+  top: 22px;
+  left: 14px;
+  width: 122px;
+  height: 88px;
+  box-sizing: border-box;
+  border: 4px solid #d9f9ff;
+  border-radius: 30px;
+  background: linear-gradient(
+    145deg, #e7faff, #75bde9
+  );
+  z-index: 5;
+}
+
+.acfc-bot-screen {
+  position: absolute;
+  inset: 12px 10px;
+  background: #102b57;
+  border-radius: 19px;
+}
+
+.acfc-bot-eyes {
+  display: flex;
+  justify-content: space-around;
+  padding: 13px 12px 0;
+}
+
+.acfc-bot-eyes i {
+  width: 12px;
+  height: 18px;
+  display: block;
+  background: #53efff;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #53efff;
+  animation: acfc-blink 5s infinite;
+}
+
+@keyframes acfc-blink {
+  0%, 43%, 47%, 100% {
+    transform: scaleY(1);
+  }
+  45% {
+    transform: scaleY(.1);
+  }
+}
+
+.acfc-bot-mouth {
+  width: 27px;
+  height: 11px;
+  margin: 5px auto 0;
+  border-bottom: 3px solid #53efff;
+  border-radius: 0 0 50% 50%;
+}
+
+/* Arms and waving hand */
+.acfc-bot-arm {
+  position: absolute;
+  width: 17px;
+  height: 55px;
+  top: 112px;
+  background: #7bcdf2;
+  border-radius: 12px;
+  z-index: 2;
+}
+
+.acfc-bot-arm.left {
+  left: 10px;
+  transform: rotate(25deg);
+}
+
+.acfc-bot-arm.right {
+  right: 8px;
+  transform-origin: center top;
+  animation: acfc-wave 2.4s ease-in-out infinite;
+}
+
+.acfc-bot-arm::after {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  left: -4px;
+  width: 25px;
+  height: 25px;
+  background: #cbf4ff;
+  border-radius: 50%;
+}
+
+@keyframes acfc-wave {
+  0%, 100% { transform: rotate(-40deg); }
+  50% { transform: rotate(-115deg); }
+}
+
+/* Robot body */
+.acfc-bot-body {
+  position: absolute;
+  top: 113px;
+  left: 33px;
+  width: 84px;
+  height: 55px;
+  background: linear-gradient(
+    145deg, #e8faff, #73b8e7
+  );
+  border-radius: 18px;
+  z-index: 3;
+}
+
+.acfc-bot-check {
+  width: 29px;
+  height: 29px;
+  margin: 13px auto;
+  background: #19bda1;
+  color: white;
+  font-size: 23px;
+  font-weight: bold;
+  line-height: 29px;
+  border-radius: 8px;
+  box-shadow: 0 0 12px #4be3c1;
+  animation: acfc-glow 2s infinite;
+}
+
+@keyframes acfc-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .6; }
+}
+
+/* Feet */
+.acfc-bot-foot {
+  position: absolute;
+  top: 160px;
+  width: 19px;
+  height: 18px;
+  background: #7bcdf2;
+  border-radius: 6px;
+}
+
+.acfc-bot-foot.left { left: 48px; }
+.acfc-bot-foot.right { right: 48px; }
+
+/* Framework labels */
+.acfc-tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.acfc-tools span {
+  padding: 5px 9px;
+  border: 1px solid #b4d7f7;
+  border-radius: 15px;
+  background: #e8f5ff;
+  color: #175a91;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.acfc-message {
+  color: #0b8d7c;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 12px;
+}
+
+/* Footer */
+.acfc-login-footer {
+  text-align: center;
+  padding: 16px 10px;
+  color: #56718b;
+  font-size: 12px;
+}
+
+.acfc-pipeline {
+  color: #176ab0;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.acfc-footer-details {
+  font-size: 11px;
+}
+
+/* Mobile layout */
+@media (max-width: 600px) {
+  .acfc-login-intro h2 {
+    font-size: 19px;
+  }
+
+  .acfc-tools span {
+    font-size: 10px;
+  }
+
+  .acfc-brand-name strong {
+    font-size: 22px;
+  }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  body.app-sign-in-register,
+  .acfc-login-intro,
+  .acfc-bot,
+  .acfc-bot-arm.right,
+  .acfc-bot-eyes i,
+  .acfc-bot-antenna::before,
+  .acfc-bot-check {
+    animation: none !important;
+  }
+}
