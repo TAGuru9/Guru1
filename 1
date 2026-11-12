@@ -1,581 +1,85 @@
 
-<style>
-/* =========================================
-   ACFC TA PRODUCTION - LOGIN THEME V9
-   Full animated robot and greeting
-   ========================================= */
+<div class="acfc-portal">
 
-/* Main login page */
-body.app-sign-in-register {
-  background: #071525 !important;
-  color: #ffffff !important;
-  margin: 0 !important;
-  min-height: 100vh !important;
-}
+  <div class="acfc-brand">
 
-/* Remove default Jenkins artwork */
-.app-sign-in-register__branding,
-.app-sign-in-register__content-logo {
-  display: none !important;
-}
+    <h2>ACFC TA PRODUCTION</h2>
 
-/* Main layout */
-body.app-sign-in-register
-.app-sign-in-register__content {
-  box-sizing: border-box !important;
-  width: 100% !important;
-  max-width: none !important;
-  min-height: 100vh !important;
-  margin: 0 !important;
-  padding: 24px !important;
+    <p>
+      TEST AUTOMATION COMMAND CENTER
+    </p>
 
-  display: flex !important;
-  justify-content: center !important;
-  align-items: center !important;
+    <small>
+      PepperMill | PepperAPI | PepperWare | Tidal
+    </small>
 
-  background:
-    radial-gradient(
-      circle at 25% 20%,
-      rgba(0,150,255,.2),
-      transparent 45%
-    ),
-    linear-gradient(
-      135deg,
-      #06111e,
-      #103150,
-      #071525
-    ) !important;
-}
+  </div>
 
-/* Main login card */
-body.app-sign-in-register
-.app-sign-in-register__content-inner {
-  box-sizing: border-box !important;
-  display: block !important;
-  flex: none !important;
+  <div class="acfc-welcome-row">
 
-  width: min(760px,100%) !important;
-  max-width: 760px !important;
-  min-width: 0 !important;
+    <div class="acfc-robot-stage"
+         aria-hidden="true">
 
-  margin: 20px auto !important;
-  padding: 30px !important;
+      <div class="acfc-bot">
 
-  background: #10233b !important;
-  color: #ffffff !important;
+        <div class="acfc-antenna"></div>
 
-  border: 1px solid #328cc4 !important;
-  border-radius: 22px !important;
+        <div class="acfc-head">
 
-  box-shadow:
-    0 0 35px rgba(0,185,255,.16),
-    0 20px 55px rgba(0,0,0,.3);
-}
+          <div class="acfc-face">
 
-/* Jenkins login title */
-.app-sign-in-register__content-inner h1 {
-  color: #ffffff !important;
-  text-align: center !important;
-  font-size: 28px !important;
-  line-height: 1.3;
-  margin: 0 0 22px !important;
-}
+            <div class="acfc-eyes">
+              <span></span>
+              <span></span>
+            </div>
 
-/* ACFC branding */
-.acfc-portal {
-  box-sizing: border-box;
-  width: 100%;
-  margin: 0 auto 25px;
-}
+            <div class="acfc-smile"></div>
 
-.acfc-brand {
-  text-align: center;
-  margin-bottom: 15px;
-}
+          </div>
 
-.acfc-brand h2 {
-  color: #ffffff !important;
-  font-size: clamp(23px,3vw,30px);
-  margin: 0 0 8px;
-}
+        </div>
 
-.acfc-brand p {
-  color: #59eaff !important;
-  font-size: 13px;
-  font-weight: 700;
-  margin: 0 0 8px;
-}
+        <div class="acfc-neck"></div>
 
-.acfc-brand small {
-  color: #c8e0ef;
-  font-size: 12px;
-}
+        <div class="acfc-body">
 
-/* Robot and greeting section */
-.acfc-welcome-row {
-  display: grid;
-  grid-template-columns:
-    minmax(0,240px)
-    minmax(0,1fr);
-  gap: 22px;
-  align-items: center;
-}
+          <div class="acfc-body-screen">
+            <span></span>
+            <span></span>
+          </div>
 
-.acfc-robot-stage {
-  min-height: 285px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+        </div>
 
-/* Full robot */
-.acfc-bot {
-  position: relative;
-  width: 180px;
-  height: 260px;
-  flex-shrink: 0;
+        <div class="acfc-arm left"></div>
+        <div class="acfc-arm right"></div>
 
-  animation:
-    acfc-float 3s ease-in-out infinite;
+        <div class="acfc-leg left"></div>
+        <div class="acfc-leg right"></div>
 
-  filter:
-    drop-shadow(
-      0 0 16px rgba(0,210,255,.25)
-    );
-}
+      </div>
 
-/* Antenna */
-.acfc-antenna {
-  position: absolute;
-  top: 0;
-  left: 88px;
-  width: 4px;
-  height: 24px;
-  background: #61eeff;
-}
+    </div>
 
-.acfc-antenna::before {
-  content: "";
-  position: absolute;
-  top: -8px;
-  left: -6px;
+    <div class="acfc-greeting">
 
-  width: 16px;
-  height: 16px;
+      <h3 id="acfc-greeting">
+        Hello! Welcome!
+      </h3>
 
-  border-radius: 50%;
-  background: #61eeff;
-  box-shadow: 0 0 15px #61eeff;
+      <p>
+        Welcome to ACFC TA Production.
+      </p>
 
-  animation: acfc-glow 2s infinite;
-}
+      <p id="acfc-farewell">
+        Wishing you a great day!
+      </p>
 
-/* Head */
-.acfc-head {
-  position: absolute;
-  top: 24px;
-  left: 32px;
+      <p>
+        Your Automation Partner
+      </p>
 
-  width: 116px;
-  height: 94px;
-  box-sizing: border-box;
+    </div>
 
-  border: 3px solid #74edff;
-  border-radius: 25px;
+  </div>
 
-  background:
-    linear-gradient(
-      135deg,
-      #087cf5,
-      #27c5e9
-    );
-
-  box-shadow:
-    0 0 20px rgba(50,220,255,.45);
-}
-
-/* Face */
-.acfc-face {
-  position: absolute;
-  inset: 13px;
-  border-radius: 16px;
-  background: #071525;
-}
-
-/* Eyes */
-.acfc-eyes {
-  display: flex;
-  justify-content: space-evenly;
-  margin-top: 24px;
-}
-
-.acfc-eyes span {
-  width: 18px;
-  height: 14px;
-  border-radius: 50%;
-
-  background: #68efff;
-  box-shadow: 0 0 12px #68efff;
-
-  animation:
-    acfc-blink 5s infinite;
-}
-
-/* Smile */
-.acfc-smile {
-  width: 30px;
-  height: 10px;
-  margin: 7px auto 0;
-
-  border-bottom: 3px solid #68efff;
-  border-radius: 0 0 50% 50%;
-}
-
-/* Neck */
-.acfc-neck {
-  position: absolute;
-  top: 118px;
-  left: 76px;
-
-  width: 28px;
-  height: 14px;
-
-  background: #1d93df;
-}
-
-/* Body */
-.acfc-body {
-  position: absolute;
-  top: 132px;
-  left: 43px;
-
-  width: 94px;
-  height: 76px;
-  box-sizing: border-box;
-
-  border: 3px solid #77efff;
-  border-radius: 21px;
-
-  background:
-    linear-gradient(
-      135deg,
-      #087cf5,
-      #20c0e9
-    );
-}
-
-/* Chest screen */
-.acfc-body-screen {
-  position: absolute;
-  inset: 12px 18px;
-  background: #071525;
-  border-radius: 12px;
-
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-
-  align-items: center;
-  justify-content: center;
-}
-
-.acfc-body-screen span {
-  width: 10px;
-  height: 10px;
-
-  border-radius: 50%;
-  background: #68efff;
-  box-shadow: 0 0 10px #68efff;
-}
-
-/* Arms */
-.acfc-arm {
-  position: absolute;
-  top: 145px;
-
-  width: 16px;
-  height: 65px;
-  border-radius: 12px;
-  background: #26b8ec;
-}
-
-.acfc-arm.left {
-  left: 16px;
-  transform-origin: top center;
-
-  animation:
-    acfc-wave 3s ease-in-out infinite;
-}
-
-.acfc-arm.right {
-  right: 16px;
-  transform: rotate(-18deg);
-}
-
-/* Legs */
-.acfc-leg {
-  position: absolute;
-  top: 208px;
-
-  width: 16px;
-  height: 42px;
-
-  background: #26b8ec;
-  border-radius: 8px;
-}
-
-.acfc-leg.left {
-  left: 63px;
-}
-
-.acfc-leg.right {
-  right: 63px;
-}
-
-/* Feet */
-.acfc-leg::after {
-  content: "";
-  position: absolute;
-  bottom: -5px;
-  left: -7px;
-
-  width: 30px;
-  height: 10px;
-  background: #46d8f8;
-  border-radius: 10px;
-}
-
-/* Greeting box */
-.acfc-greeting {
-  box-sizing: border-box;
-  min-width: 0;
-
-  background: #091b30;
-  padding: 22px;
-
-  border: 1px solid #2d6189;
-  border-radius: 16px;
-}
-
-.acfc-greeting h3 {
-  color: #59eaff !important;
-
-  font-size:
-    clamp(20px,2.5vw,26px);
-
-  line-height: 1.3;
-  margin: 0 0 12px;
-}
-
-.acfc-greeting p {
-  color: #d9efff !important;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-#acfc-farewell {
-  color: #7af4bd !important;
-  font-weight: 700;
-}
-
-/* Preserve native Jenkins form */
-.app-sign-in-register__content-inner form {
-  box-sizing: border-box !important;
-  display: block !important;
-
-  width: 100% !important;
-  max-width: 520px !important;
-  min-width: 0 !important;
-
-  margin: 0 auto !important;
-  padding: 0 !important;
-
-  background: transparent !important;
-  border: 0 !important;
-}
-
-/* Labels */
-.app-sign-in-register form label {
-  color: #d3eaff !important;
-}
-
-/* Inputs */
-.app-sign-in-register
-form input[type="text"],
-.app-sign-in-register
-form input[type="password"] {
-  box-sizing: border-box !important;
-  width: 100% !important;
-  min-height: 44px !important;
-
-  background: #07182e !important;
-  color: #ffffff !important;
-
-  border: 1px solid #436c93 !important;
-  border-radius: 8px !important;
-}
-
-/* Focus */
-.app-sign-in-register
-form input:focus-visible,
-.app-sign-in-register
-form button:focus-visible {
-  outline: 2px solid #59eaff !important;
-  outline-offset: 2px;
-}
-
-/* Sign-in button */
-.app-sign-in-register
-form button[type="submit"],
-.app-sign-in-register
-form input[type="submit"] {
-  width: 100% !important;
-  min-height: 44px !important;
-
-  background: #087cf5 !important;
-  color: #ffffff !important;
-  border-radius: 8px !important;
-}
-
-/* Footer */
-.acfc-footer {
-  text-align: center;
-  margin-top: 18px;
-  color: #bbd9ed;
-  font-size: 12px;
-}
-
-/* Animations */
-@keyframes acfc-float {
-  0%,100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-8px);
-  }
-}
-
-@keyframes acfc-wave {
-  0%,100% {
-    transform: rotate(15deg);
-  }
-  50% {
-    transform: rotate(48deg);
-  }
-}
-
-@keyframes acfc-blink {
-  0%,44%,48%,100% {
-    transform: scaleY(1);
-  }
-  46% {
-    transform: scaleY(.1);
-  }
-}
-
-@keyframes acfc-glow {
-  0%,100% {
-    opacity: .5;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-/* Responsive layout */
-@media (max-width: 680px) {
-  .acfc-welcome-row {
-    grid-template-columns: 1fr;
-    gap: 5px;
-  }
-
-  .acfc-robot-stage {
-    min-height: 265px;
-  }
-
-  .acfc-greeting {
-    text-align: center;
-  }
-
-  body.app-sign-in-register
-  .app-sign-in-register__content {
-    padding: 12px !important;
-    align-items: flex-start !important;
-  }
-}
-
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  .acfc-bot,
-  .acfc-arm.left,
-  .acfc-eyes span,
-  .acfc-antenna::before {
-    animation: none !important;
-  }
-}
-</style>
-
-<script>
-(function () {
-  "use strict";
-
-  function greet() {
-    var title =
-      document.getElementById("acfc-greeting");
-
-    var closing =
-      document.getElementById("acfc-farewell");
-
-    if (!title || !closing) return;
-
-    var hour = new Date().getHours();
-
-    if (hour >= 5 && hour < 12) {
-      title.textContent =
-        "Hello! Good morning!";
-
-      closing.textContent =
-        "Have a wonderful day ahead!";
-
-    } else if (hour >= 12 && hour < 17) {
-      title.textContent =
-        "Hello! Good afternoon!";
-
-      closing.textContent =
-        "Have a productive and successful day!";
-
-    } else if (hour >= 17 && hour < 21) {
-      title.textContent =
-        "Hello! Good evening!";
-
-      closing.textContent =
-        "Have a relaxing evening!";
-
-    } else {
-      title.textContent =
-        "Hello! Good night!";
-
-      closing.textContent =
-        "Have a peaceful night!";
-    }
-  }
-
-  function startGreeting() {
-    greet();
-
-    window.setInterval(
-      greet,
-      60000
-    );
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener(
-      "DOMContentLoaded",
-      startGreeting
-    );
-  } else {
-    startGreeting();
-  }
-})();
-</script>
+</div>
