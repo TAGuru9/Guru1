@@ -1,24 +1,222 @@
 
-<div class="acfc-login-footer">
+/* =====================================
+   ACFC TA PRODUCTION
+   ANIMATED JENKINS LOGIN THEME
+   ===================================== */
 
-  <div class="acfc-status">
-    &#9679; ENTERPRISE AUTOMATION PLATFORM
-  </div>
+/* Full-screen background */
+body.app-sign-in-register {
+    min-height: 100vh !important;
 
-  <div>
-    PepperMill | PepperAPI | PepperWare | Tidal
-  </div>
+    background:
+      radial-gradient(
+        circle at 20% 25%,
+        rgba(0,180,255,0.18),
+        transparent 40%
+      ),
+      radial-gradient(
+        circle at 80% 75%,
+        rgba(100,70,255,0.20),
+        transparent 40%
+      ),
+      linear-gradient(
+        135deg,
+        #050c18,
+        #102b50,
+        #071323
+      ) !important;
 
-  <div>
-    Quality Engineering &amp; Test Automation
-  </div>
+    background-attachment: fixed !important;
+    color: #ffffff !important;
+    font-family: "Segoe UI", Arial, sans-serif;
+}
 
-  <div>
-    Authorized Users Only
-  </div>
+/* Hide original decorative artwork */
+.app-sign-in-register__brand {
+    background: transparent !important;
+}
 
-  <div>
-    ACFC TA Production
-  </div>
+/* Login form container */
+.app-sign-in-register form {
+    background: rgba(
+      10, 25, 48, 0.94
+    ) !important;
 
-</div>
+    border: 1px solid
+      rgba(44, 194, 255, 0.40) !important;
+
+    border-radius: 20px !important;
+
+    padding: 30px !important;
+
+    box-shadow:
+      0 0 35px rgba(0,160,255,0.20),
+      0 20px 45px rgba(0,0,0,0.25);
+
+    animation: acfc-appear .7s ease-out;
+}
+
+/* Labels */
+.app-sign-in-register label {
+    color: #dcecff !important;
+    font-weight: 600;
+}
+
+/* Username and password fields */
+.app-sign-in-register
+input[type="text"],
+.app-sign-in-register
+input[type="password"] {
+    background: #112641 !important;
+    color: #ffffff !important;
+
+    border: 1px solid #40638b !important;
+    border-radius: 9px !important;
+
+    padding: 11px !important;
+}
+
+/* Input focus */
+.app-sign-in-register
+input:focus {
+    border-color: #28c9ff !important;
+    box-shadow:
+      0 0 0 3px rgba(
+        40,201,255,0.18
+      ) !important;
+}
+
+/* Sign-in button */
+.app-sign-in-register
+button[type="submit"],
+.app-sign-in-register
+input[type="submit"] {
+    background: linear-gradient(
+      90deg,
+      #087cf5,
+      #11c6ee
+    ) !important;
+
+    color: #ffffff !important;
+    font-weight: 700 !important;
+
+    border: none !important;
+    border-radius: 9px !important;
+
+    transition:
+      transform .2s ease,
+      box-shadow .2s ease;
+}
+
+/* Button hover */
+.app-sign-in-register
+button[type="submit"]:hover,
+.app-sign-in-register
+input[type="submit"]:hover {
+    box-shadow:
+      0 0 20px rgba(
+        0,190,255,.45
+      ) !important;
+}
+
+/* Header animation */
+.acfc-login-hero {
+    text-align: center;
+    color: #ffffff;
+}
+
+.acfc-login-hero h2 {
+    color: #ffffff !important;
+    font-size: 24px;
+    letter-spacing: 1px;
+}
+
+.acfc-login-hero p {
+    color: #b4d5f1;
+}
+
+/* Robot icon */
+.acfc-robot {
+    width: 82px;
+    height: 82px;
+    margin: 10px auto;
+
+    display: grid;
+    place-items: center;
+
+    border-radius: 22px;
+
+    background: linear-gradient(
+      135deg,
+      #067dff,
+      #27e0f5
+    );
+
+    box-shadow:
+      0 0 30px rgba(
+        19,195,255,.50
+      );
+
+    animation:
+      acfc-float 3s ease-in-out infinite;
+}
+
+.acfc-robot span {
+    color: #07182b;
+    font-size: 35px;
+    font-weight: 900;
+}
+
+/* Footer */
+.acfc-login-footer {
+    text-align: center;
+    color: #9cbad7;
+    margin-top: 20px;
+    font-size: 12px;
+}
+
+.acfc-login-footer .acfc-status {
+    color: #53e6a2;
+}
+
+/* Animations */
+@keyframes acfc-float {
+    0%, 100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-8px);
+    }
+}
+
+@keyframes acfc-appear {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+    .acfc-robot,
+    .app-sign-in-register form {
+        animation: none !important;
+    }
+}
+
+/* Mobile display */
+@media (max-width: 600px) {
+    .app-sign-in-register form {
+        padding: 18px !important;
+    }
+
+    .acfc-login-hero h2 {
+        font-size: 20px;
+    }
+}
