@@ -1,539 +1,63 @@
-<style>
-/* =========================================================
-   ACFC TA PRODUCTION
-   SPLIT LOGIN WITH FULL ROBOT + TEST AUTOMATION INFO
-   ========================================================= */
-
-:root {
-  --acfc-bg-1: #071321;
-  --acfc-bg-2: #0f2e50;
-  --acfc-panel: rgba(10, 25, 45, 0.94);
-  --acfc-panel-2: rgba(7, 22, 38, 0.92);
-  --acfc-border: rgba(78, 201, 255, 0.42);
-  --acfc-blue: #0b84ff;
-  --acfc-cyan: #59eaff;
-  --acfc-text: #ffffff;
-  --acfc-soft: #cfe7fb;
-  --acfc-muted: #9fc3df;
-}
-
-/* Base page */
-html,
-body.app-sign-in-register {
-  min-height: 100% !important;
-  margin: 0 !important;
-  background: linear-gradient(135deg, var(--acfc-bg-1), var(--acfc-bg-2), #081725) !important;
-  color: var(--acfc-text) !important;
-}
-
-/* Hide default Jenkins branding */
-.app-sign-in-register__branding,
-.app-sign-in-register__content-logo {
-  display: none !important;
-}
-
-/* Page wrapper */
-.app-sign-in-register__content,
-#main-panel {
-  min-height: 100vh !important;
-  width: 100% !important;
-  max-width: none !important;
-  margin: 0 !important;
-
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-
-  background:
-    radial-gradient(circle at 20% 25%, rgba(0, 183, 255, 0.14), transparent 30%),
-    radial-gradient(circle at 80% 75%, rgba(82, 126, 255, 0.14), transparent 30%),
-    linear-gradient(135deg, #06111f, #143457, #081524) !important;
-}
-
-/* Main split panel */
-.app-sign-in-register__content-inner {
-  box-sizing: border-box !important;
-  width: min(1180px, 96vw) !important;
-  max-width: 1180px !important;
-  min-height: 650px !important;
-  margin: 26px auto !important;
-  padding: 0 !important;
-
-  display: grid !important;
-  grid-template-columns: 1.15fr 0.95fr !important;
-  grid-template-areas:
-    "hero title"
-    "hero form"
-    "hero footer" !important;
-
-  background: var(--acfc-panel) !important;
-  color: var(--acfc-text) !important;
-
-  border: 1px solid var(--acfc-border) !important;
-  border-radius: 26px !important;
-  overflow: hidden !important;
-
-  box-shadow:
-    0 0 38px rgba(0, 183, 255, 0.15),
-    0 30px 80px rgba(0, 0, 0, 0.35) !important;
-}
-
-/* LEFT SIDE */
-.acfc-split-hero {
-  grid-area: hero;
-  position: relative;
-  overflow: hidden;
-  padding: 34px 32px 30px;
-  background:
-    radial-gradient(circle at 30% 20%, rgba(74, 225, 255, 0.11), transparent 28%),
-    radial-gradient(circle at 65% 70%, rgba(18, 130, 255, 0.14), transparent 34%),
-    linear-gradient(160deg, rgba(7, 25, 42, 0.96), rgba(12, 40, 66, 0.96));
-  border-right: 1px solid rgba(95, 214, 255, 0.18);
-}
-
-/* Decorative grid */
-.acfc-split-hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(100, 220, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(100, 220, 255, 0.05) 1px, transparent 1px);
-  background-size: 28px 28px;
-  mask-image: linear-gradient(to bottom, rgba(0,0,0,.8), rgba(0,0,0,.25));
-  pointer-events: none;
-}
-
-/* Hero headings */
-.acfc-hero-brand {
-  position: relative;
-  z-index: 1;
-  margin-bottom: 18px;
-}
-
-.acfc-hero-brand h2 {
-  margin: 0 0 10px;
-  font-size: 30px !important;
-  font-weight: 800;
-  color: #ffffff !important;
-  letter-spacing: .8px;
-}
-
-.acfc-hero-brand .acfc-subtitle {
-  margin: 0 0 8px;
-  color: var(--acfc-cyan) !important;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 1px;
-}
-
-.acfc-hero-brand .acfc-frameworks {
-  margin: 0;
-  color: var(--acfc-soft) !important;
-  font-size: 13px;
-}
-
-/* Full robot section */
-.acfc-robot-stage {
-  position: relative;
-  z-index: 1;
-  height: 320px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 14px 0 16px;
-}
-
-/* ROBOT */
-.acfc-full-robot {
-  position: relative;
-  width: 210px;
-  height: 280px;
-  animation: acfc-float 3.6s ease-in-out infinite;
-  filter: drop-shadow(0 0 20px rgba(0, 215, 255, 0.20));
-}
-
-.acfc-full-robot .antenna {
-  position: absolute;
-  top: 0;
-  left: 103px;
-  width: 4px;
-  height: 26px;
-  background: #69eeff;
-  border-radius: 10px;
-}
-
-.acfc-full-robot .antenna::before {
-  content: "";
-  position: absolute;
-  top: -10px;
-  left: -6px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #63efff;
-  box-shadow: 0 0 18px rgba(99, 239, 255, .9);
-  animation: acfc-pulse 2.1s ease-in-out infinite;
-}
-
-.acfc-full-robot .head {
-  position: absolute;
-  top: 18px;
-  left: 42px;
-  width: 126px;
-  height: 104px;
-  border-radius: 28px;
-  background: linear-gradient(135deg, #0a84ff, #32d1ef);
-  border: 3px solid #86f0ff;
-  box-shadow:
-    0 0 18px rgba(78, 223, 255, .55),
-    inset 0 0 10px rgba(255,255,255,.08);
-}
-
-.acfc-full-robot .face {
-  position: absolute;
-  inset: 15px 15px 14px;
-  border-radius: 18px;
-  background: #071525;
-}
-
-.acfc-full-robot .eyes {
-  position: absolute;
-  top: 23px;
-  left: 0;
-  width: 100%;
-  display: flex;
-  justify-content: space-evenly;
-}
-
-.acfc-full-robot .eyes span {
-  width: 20px;
-  height: 16px;
-  border-radius: 50%;
-  background: #69eeff;
-  box-shadow: 0 0 14px rgba(105, 238, 255, .9);
-  animation: acfc-blink 5s infinite;
-}
-
-.acfc-full-robot .mouth {
-  position: absolute;
-  left: 50%;
-  bottom: 18px;
-  width: 38px;
-  height: 14px;
-  transform: translateX(-50%);
-  border-bottom: 4px solid #69eeff;
-  border-radius: 0 0 30px 30px;
-}
-
-.acfc-full-robot .neck {
-  position: absolute;
-  top: 122px;
-  left: 86px;
-  width: 38px;
-  height: 16px;
-  border-radius: 6px;
-  background: #1c92df;
-}
-
-.acfc-full-robot .body {
-  position: absolute;
-  top: 138px;
-  left: 52px;
-  width: 106px;
-  height: 88px;
-  border-radius: 24px;
-  background: linear-gradient(135deg, #097fff, #1fbfe9);
-  border: 3px solid #7aefff;
-  box-shadow: 0 0 18px rgba(78, 223, 255, .35);
-}
-
-.acfc-full-robot .body-panel {
-  position: absolute;
-  inset: 14px 16px;
-  border-radius: 14px;
-  background: #071525;
-}
-
-.acfc-full-robot .body-panel::before,
-.acfc-full-robot .body-panel::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  width: 12px;
-  height: 12px;
-  margin-left: -6px;
-  border-radius: 50%;
-  background: #5cf0ff;
-  box-shadow: 0 0 10px rgba(92, 240, 255, .8);
-}
-
-.acfc-full-robot .body-panel::before { top: 14px; }
-.acfc-full-robot .body-panel::after { bottom: 14px; }
-
-.acfc-full-robot .arm {
-  position: absolute;
-  top: 154px;
-  width: 18px;
-  height: 72px;
-  border-radius: 18px;
-  background: linear-gradient(180deg, #1ec4eb, #0d7ef9);
-  transform-origin: top center;
-}
-
-.acfc-full-robot .arm.left {
-  left: 24px;
-  transform: rotate(18deg);
-  animation: acfc-arm-left 3.4s ease-in-out infinite;
-}
-
-.acfc-full-robot .arm.right {
-  right: 24px;
-  transform: rotate(-18deg);
-  animation: acfc-arm-right 3.4s ease-in-out infinite;
-}
-
-.acfc-full-robot .hand {
-  position: absolute;
-  bottom: -10px;
-  left: 50%;
-  width: 18px;
-  height: 18px;
-  margin-left: -9px;
-  border-radius: 50%;
-  background: #70f0ff;
-  box-shadow: 0 0 10px rgba(112, 240, 255, .65);
-}
-
-.acfc-full-robot .leg {
-  position: absolute;
-  top: 223px;
-  width: 18px;
-  height: 54px;
-  border-radius: 18px;
-  background: linear-gradient(180deg, #1ec4eb, #0d7ef9);
-}
-
-.acfc-full-robot .leg.left {
-  left: 78px;
-}
-
-.acfc-full-robot .leg.right {
-  right: 78px;
-}
-
-.acfc-full-robot .foot {
-  position: absolute;
-  bottom: -8px;
-  width: 34px;
-  height: 12px;
-  left: 50%;
-  margin-left: -17px;
-  border-radius: 16px;
-  background: #1f95df;
-}
-
-/* Explanation card */
-.acfc-info-box {
-  position: relative;
-  z-index: 1;
-  margin-top: 8px;
-  padding: 18px 18px 14px;
-  border-radius: 18px;
-  background: rgba(8, 24, 40, 0.75);
-  border: 1px solid rgba(89, 234, 255, 0.20);
-}
-
-.acfc-info-box h3 {
-  margin: 0 0 10px;
-  font-size: 20px;
-  color: #ffffff !important;
-}
-
-.acfc-info-box p {
-  margin: 0 0 10px;
-  color: var(--acfc-soft) !important;
-  font-size: 13px;
-  line-height: 1.65;
-}
-
-.acfc-info-box ul {
-  margin: 10px 0 0 18px;
-  padding: 0;
-  color: var(--acfc-soft);
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-.acfc-info-box li {
-  margin-bottom: 4px;
-}
-
-/* RIGHT SIDE */
-.app-sign-in-register__content-inner h1 {
-  grid-area: title;
-  align-self: end;
-  margin: 38px 42px 14px !important;
-  text-align: left !important;
-  font-size: 30px !important;
-  color: #ffffff !important;
-}
-
-.app-sign-in-register form {
-  grid-area: form;
-  width: auto !important;
-  max-width: none !important;
-  margin: 0 42px !important;
-  padding: 26px 28px !important;
-  background: var(--acfc-panel-2) !important;
-  border: 1px solid rgba(95, 214, 255, 0.18) !important;
-  border-radius: 18px !important;
-}
-
-.app-sign-in-register label {
-  color: var(--acfc-soft) !important;
-  font-size: 14px !important;
-  font-weight: 600;
-}
-
-.app-sign-in-register input[type="text"],
-.app-sign-in-register input[type="password"] {
-  box-sizing: border-box !important;
-  width: 100% !important;
-  min-height: 46px !important;
-  background: #081726 !important;
-  color: #ffffff !important;
-  border: 1px solid #3e6c95 !important;
-  border-radius: 10px !important;
-}
-
-.app-sign-in-register input:focus-visible {
-  outline: 2px solid var(--acfc-cyan) !important;
-  outline-offset: 2px;
-}
-
-.app-sign-in-register button[type="submit"],
-.app-sign-in-register input[type="submit"] {
-  min-height: 48px !important;
-  background: linear-gradient(90deg, #0a84ff, #11b9e8) !important;
-  color: #ffffff !important;
-  font-size: 15px !important;
-  font-weight: 700 !important;
-  border: none !important;
-  border-radius: 10px !important;
-  cursor: pointer;
-  box-shadow: 0 0 12px rgba(17, 185, 232, 0.18);
-}
-
-.app-sign-in-register button[type="submit"]:hover,
-.app-sign-in-register input[type="submit"]:hover {
-  filter: brightness(1.08);
-  box-shadow: 0 0 18px rgba(17, 185, 232, 0.30);
-}
-
-/* Footer area */
-.acfc-login-footer {
-  grid-area: footer;
-  margin: 12px 42px 34px;
-  text-align: left;
-}
-
-.acfc-login-footer p {
-  margin: 0 0 5px;
-  color: #c8def0 !important;
-  font-size: 12px !important;
-  line-height: 1.55;
-}
-
-/* Animations */
-@keyframes acfc-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
-
-@keyframes acfc-pulse {
-  0%, 100% {
-    opacity: .6;
-    box-shadow: 0 0 8px rgba(99, 239, 255, .6);
-  }
-  50% {
-    opacity: 1;
-    box-shadow: 0 0 20px rgba(99, 239, 255, 1);
-  }
-}
-
-@keyframes acfc-blink {
-  0%, 44%, 48%, 100% { transform: scaleY(1); }
-  46% { transform: scaleY(.12); }
-}
-
-@keyframes acfc-arm-left {
-  0%, 100% { transform: rotate(18deg); }
-  50% { transform: rotate(8deg); }
-}
-
-@keyframes acfc-arm-right {
-  0%, 100% { transform: rotate(-18deg); }
-  50% { transform: rotate(-8deg); }
-}
-
-/* Mobile */
-@media (max-width: 980px) {
-  .app-sign-in-register__content-inner {
-    grid-template-columns: 1fr !important;
-    grid-template-areas:
-      "hero"
-      "title"
-      "form"
-      "footer" !important;
-    width: min(760px, 96vw) !important;
-    min-height: auto !important;
-  }
-
-  .acfc-split-hero {
-    border-right: none;
-    border-bottom: 1px solid rgba(95, 214, 255, 0.18);
-  }
-
-  .app-sign-in-register__content-inner h1,
-  .app-sign-in-register form,
-  .acfc-login-footer {
-    margin-left: 26px !important;
-    margin-right: 26px !important;
-  }
-}
-
-@media (max-width: 600px) {
-  .acfc-split-hero {
-    padding: 24px 18px;
-  }
-
-  .app-sign-in-register__content-inner h1 {
-    font-size: 26px !important;
-    margin-top: 24px !important;
-  }
-
-  .app-sign-in-register form {
-    padding: 18px !important;
-  }
-
-  .acfc-hero-brand h2 {
-    font-size: 24px !important;
-  }
-
-  .acfc-full-robot {
-    transform: scale(.9);
-    transform-origin: center top;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .acfc-full-robot,
-  .acfc-full-robot .eyes span,
-  .acfc-full-robot .antenna::before,
-  .acfc-full-robot .arm.left,
-  .acfc-full-robot .arm.right {
-    animation: none !important;
-  }
-}
-</style>
+<div class="acfc-split-hero">
+
+  <div class="acfc-hero-brand">
+    <h2>ACFC TA PRODUCTION</h2>
+    <p class="acfc-subtitle">TEST AUTOMATION COMMAND CENTER</p>
+    <p class="acfc-frameworks">PepperMill | PepperAPI | PepperWare | Tidal</p>
+  </div>
+
+  <div class="acfc-robot-stage" aria-hidden="true">
+    <div class="acfc-full-robot">
+
+      <div class="antenna"></div>
+
+      <div class="head">
+        <div class="face">
+          <div class="eyes">
+            <span></span>
+            <span></span>
+          </div>
+          <div class="mouth"></div>
+        </div>
+      </div>
+
+      <div class="neck"></div>
+
+      <div class="body">
+        <div class="body-panel"></div>
+      </div>
+
+      <div class="arm left">
+        <div class="hand"></div>
+      </div>
+
+      <div class="arm right">
+        <div class="hand"></div>
+      </div>
+
+      <div class="leg left">
+        <div class="foot"></div>
+      </div>
+
+      <div class="leg right">
+        <div class="foot"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="acfc-info-box">
+    <h3>What is Test Automation?</h3>
+    <p>
+      Test automation uses software scripts and tools to validate applications automatically,
+      helping teams test faster, reduce manual effort, and improve quality in every release.
+    </p>
+    <ul>
+      <li>Runs repeatable validation steps automatically</li>
+      <li>Improves speed, accuracy, and regression coverage</li>
+      <li>Supports CI/CD and shift-left quality practices</li>
+      <li>Helps catch defects early and consistently</li>
+    </ul>
+  </div>
+
+</div>
