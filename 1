@@ -1,5 +1,631 @@
-<div class="acfc-login-footer">
-  <p><strong>ACFC Test Automation Platform</strong></p>
-  <p>Authorized Users Only</p>
-  <p>Quality Engineering | Continuous Delivery</p>
-</div>
+
+/* ===========================================
+   ACFC TA PRODUCTION
+   FINAL ROBOT LOGIN THEME
+   =========================================== */
+
+:root {
+  --acfc-bg: #071525;
+  --acfc-panel: #10233b;
+  --acfc-cyan: #59eaff;
+  --acfc-blue: #087cf5;
+  --acfc-text: #ffffff;
+}
+
+/* PAGE BACKGROUND */
+
+html,
+body.app-sign-in-register {
+  min-height: 100%;
+  margin: 0 !important;
+  background:
+    radial-gradient(
+      circle at 25% 25%,
+      rgba(0,170,255,.18),
+      transparent 40%
+    ),
+    linear-gradient(
+      135deg,
+      #061321,
+      #12375b,
+      #071525
+    ) !important;
+  color: #ffffff !important;
+}
+
+/* HIDE ORIGINAL JENKINS MASCOT */
+
+.app-sign-in-register__branding,
+.app-sign-in-register__content-logo {
+  display: none !important;
+}
+
+/* MAIN PAGE */
+
+.app-sign-in-register__content,
+#main-panel {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-height: 100vh !important;
+
+  margin: 0 !important;
+  padding: 24px !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  background: transparent !important;
+}
+
+/* MAIN LOGIN CARD */
+
+.app-sign-in-register__content-inner {
+  box-sizing: border-box !important;
+
+  width: min(760px, 96vw) !important;
+  max-width: 760px !important;
+  min-width: 0 !important;
+
+  margin: 20px auto !important;
+  padding: 30px !important;
+
+  display: block !important;
+
+  background: var(--acfc-panel) !important;
+  color: #ffffff !important;
+
+  border: 1px solid #318fca !important;
+  border-radius: 24px !important;
+
+  box-shadow:
+    0 0 30px rgba(0,180,255,.16),
+    0 24px 60px rgba(0,0,0,.35) !important;
+}
+
+/* BRAND TITLE */
+
+.acfc-login-header {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.acfc-brand-block {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.acfc-brand-block h2 {
+  margin: 0 0 8px;
+  color: #ffffff !important;
+  font-size: clamp(23px, 3vw, 32px);
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.acfc-subtitle {
+  color: var(--acfc-cyan) !important;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.acfc-frameworks {
+  color: #c6e0f2 !important;
+  font-size: 12px;
+}
+
+/* ROBOT AND GREETING LAYOUT */
+
+.acfc-hero-row {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 280px)
+    minmax(0, 1fr);
+  gap: 20px;
+  align-items: center;
+}
+
+/* FULL ROBOT */
+
+.acfc-full-robot-wrap {
+  min-height: 325px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background:
+    radial-gradient(
+      circle,
+      rgba(0,190,255,.10),
+      transparent 65%
+    );
+}
+
+.acfc-full-robot {
+  position: relative;
+  width: 210px;
+  height: 290px;
+  flex: none;
+
+  animation:
+    acfc-float 3.5s ease-in-out infinite;
+
+  filter:
+    drop-shadow(
+      0 0 16px rgba(0,210,255,.22)
+    );
+}
+
+/* ANTENNA */
+
+.acfc-antenna {
+  position: absolute;
+  top: 0;
+  left: 103px;
+  width: 4px;
+  height: 24px;
+
+  background: #69eeff;
+  border-radius: 10px;
+}
+
+.acfc-antenna::before {
+  content: "";
+  position: absolute;
+  top: -9px;
+  left: -6px;
+
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+
+  background: #69eeff;
+  box-shadow: 0 0 18px #69eeff;
+
+  animation: acfc-pulse 2s infinite;
+}
+
+/* ROBOT HEAD */
+
+.acfc-head {
+  position: absolute;
+  top: 18px;
+  left: 42px;
+
+  width: 126px;
+  height: 104px;
+  box-sizing: border-box;
+
+  background:
+    linear-gradient(
+      135deg,
+      #0a84ff,
+      #32d1ef
+    );
+
+  border: 3px solid #86f0ff;
+  border-radius: 28px;
+
+  box-shadow:
+    0 0 20px rgba(0,200,255,.45);
+}
+
+/* FACE */
+
+.acfc-face {
+  position: absolute;
+  inset: 15px;
+  background: #071525;
+  border-radius: 18px;
+}
+
+/* EYES */
+
+.acfc-eyes {
+  position: absolute;
+  top: 24px;
+  width: 100%;
+
+  display: flex;
+  justify-content: space-evenly;
+}
+
+.acfc-eyes span {
+  width: 20px;
+  height: 16px;
+
+  background: #69eeff;
+  border-radius: 50%;
+
+  box-shadow: 0 0 14px #69eeff;
+
+  animation:
+    acfc-blink 5s infinite;
+}
+
+/* SMILE */
+
+.acfc-mouth {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+
+  width: 38px;
+  height: 14px;
+
+  transform: translateX(-50%);
+
+  border-bottom: 4px solid #69eeff;
+  border-radius: 0 0 30px 30px;
+}
+
+/* NECK */
+
+.acfc-neck {
+  position: absolute;
+  top: 122px;
+  left: 86px;
+
+  width: 38px;
+  height: 16px;
+
+  background: #1c92df;
+  border-radius: 6px;
+}
+
+/* BODY */
+
+.acfc-body {
+  position: absolute;
+  top: 138px;
+  left: 52px;
+
+  width: 106px;
+  height: 88px;
+  box-sizing: border-box;
+
+  background:
+    linear-gradient(
+      135deg,
+      #097fff,
+      #1fbfe9
+    );
+
+  border: 3px solid #7aefff;
+  border-radius: 24px;
+
+  box-shadow:
+    0 0 18px rgba(0,200,255,.3);
+}
+
+/* BODY PANEL */
+
+.acfc-body-panel {
+  position: absolute;
+  inset: 14px 16px;
+  border-radius: 14px;
+  background: #071525;
+}
+
+.acfc-body-panel span {
+  position: absolute;
+  left: 50%;
+
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+
+  border-radius: 50%;
+  background: #5cf0ff;
+
+  box-shadow: 0 0 10px #5cf0ff;
+}
+
+.acfc-body-panel span:first-child {
+  top: 14px;
+}
+
+.acfc-body-panel span:last-child {
+  bottom: 14px;
+}
+
+/* ARMS */
+
+.acfc-arm {
+  position: absolute;
+  top: 154px;
+
+  width: 18px;
+  height: 72px;
+
+  border-radius: 18px;
+  background:
+    linear-gradient(
+      #1ec4eb,
+      #0d7ef9
+    );
+}
+
+.acfc-arm.left {
+  left: 24px;
+  transform-origin: top center;
+
+  animation:
+    acfc-wave 3.4s ease-in-out infinite;
+}
+
+.acfc-arm.right {
+  right: 24px;
+  transform: rotate(-18deg);
+}
+
+/* HANDS */
+
+.acfc-hand {
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+
+  border-radius: 50%;
+  background: #70f0ff;
+}
+
+/* LEGS */
+
+.acfc-leg {
+  position: absolute;
+  top: 223px;
+
+  width: 18px;
+  height: 54px;
+
+  border-radius: 18px;
+  background: #1aa9eb;
+}
+
+.acfc-leg.left {
+  left: 78px;
+}
+
+.acfc-leg.right {
+  right: 78px;
+}
+
+/* FEET */
+
+.acfc-foot {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+
+  width: 34px;
+  height: 12px;
+  margin-left: -17px;
+
+  border-radius: 16px;
+  background: #1f95df;
+}
+
+/* GREETING PANEL */
+
+.acfc-greeting-box {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 22px;
+
+  background: rgba(5,20,36,.8);
+
+  border: 1px solid
+    rgba(89,234,255,.30);
+
+  border-radius: 18px;
+}
+
+.acfc-greeting-box h3 {
+  margin: 0 0 14px;
+
+  color: #59eaff !important;
+  font-size: 24px !important;
+  line-height: 1.3;
+}
+
+.acfc-greeting-box p {
+  margin: 8px 0;
+
+  color: #e0f2ff !important;
+  font-size: 14px !important;
+  line-height: 1.6;
+}
+
+#acfc-farewell {
+  color: #76f0bf !important;
+  font-weight: 700;
+}
+
+.acfc-greeting-note {
+  margin-top: 15px;
+  padding-top: 12px;
+
+  border-top: 1px solid
+    rgba(90,200,255,.2);
+
+  color: #aac9df;
+  font-size: 12px;
+}
+
+/* NATIVE JENKINS LOGIN */
+
+.app-sign-in-register__content-inner h1 {
+  color: white !important;
+  font-size: 27px !important;
+  text-align: center !important;
+  margin: 25px 0 !important;
+}
+
+/* Preserve form structure */
+
+.app-sign-in-register form {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 520px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  background: transparent !important;
+}
+
+/* Labels */
+
+.app-sign-in-register label {
+  color: #d5e9fb !important;
+}
+
+/* Inputs */
+
+.app-sign-in-register input[type="text"],
+.app-sign-in-register input[type="password"] {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-height: 44px !important;
+
+  background: #07182e !important;
+  color: white !important;
+
+  border: 1px solid #3d688f !important;
+  border-radius: 9px !important;
+}
+
+.app-sign-in-register input:focus-visible {
+  outline: 2px solid #59eaff !important;
+  outline-offset: 2px;
+}
+
+/* Checkbox */
+
+.app-sign-in-register input[type="checkbox"] {
+  accent-color: #168cff;
+}
+
+/* Sign in button */
+
+.app-sign-in-register button[type="submit"],
+.app-sign-in-register input[type="submit"] {
+  min-height: 46px !important;
+  width: 100% !important;
+
+  background:
+    linear-gradient(
+      90deg,
+      #087cf5,
+      #09b4e5
+    ) !important;
+
+  color: white !important;
+  font-weight: 700 !important;
+  border-radius: 9px !important;
+}
+
+/* FOOTER */
+
+.acfc-login-footer {
+  text-align: center;
+  margin-top: 20px;
+}
+
+.acfc-login-footer p {
+  color: #c3d9ec !important;
+  font-size: 12px !important;
+}
+
+/* ANIMATIONS */
+
+@keyframes acfc-float {
+  0%,100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes acfc-blink {
+  0%,44%,48%,100% {
+    transform: scaleY(1);
+  }
+  46% {
+    transform: scaleY(.12);
+  }
+}
+
+@keyframes acfc-pulse {
+  0%,100% {
+    opacity: .55;
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 22px #69eeff;
+  }
+}
+
+@keyframes acfc-wave {
+  0%,100% {
+    transform: rotate(18deg);
+  }
+  50% {
+    transform: rotate(4deg);
+  }
+}
+
+/* RESPONSIVE */
+
+@media (max-width: 760px) {
+
+  .app-sign-in-register__content-inner {
+    width: min(520px, 96vw) !important;
+    padding: 22px !important;
+  }
+
+  .acfc-hero-row {
+    grid-template-columns: 1fr;
+  }
+
+  .acfc-full-robot-wrap {
+    min-height: 300px;
+  }
+}
+
+@media (max-width: 480px) {
+
+  .app-sign-in-register__content {
+    padding: 12px !important;
+  }
+
+  .app-sign-in-register__content-inner {
+    width: 100% !important;
+    padding: 18px !important;
+    border-radius: 16px !important;
+  }
+
+  .acfc-brand-block h2 {
+    font-size: 22px !important;
+  }
+
+  .acfc-greeting-box {
+    padding: 16px;
+  }
+}
+
+/* ACCESSIBILITY */
+
+@media (prefers-reduced-motion: reduce) {
+  .acfc-full-robot,
+  .acfc-eyes span,
+  .acfc-antenna::before,
+  .acfc-arm.left {
+    animation: none !important;
+  }
+}
