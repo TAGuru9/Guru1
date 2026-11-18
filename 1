@@ -1,68 +1,194 @@
 
-;WITH CycleDefects AS
+;WITH FolderTree AS
 (
     SELECT
+        RF_ID,
+        RF_PARENT_ID,
+        RF_NAME,
+        CAST(RF_NAME AS VARCHAR(MAX)) AS Folder_Path,
+        CAST(RF_NAME AS VARCHAR(255)) AS Parent_Folder,
+        0 AS Folder_Level
+    FROM [amfc_isqat_db].[td].RELEASE_FOLDERS
+    WHERE RF_NAME = '2026 Releases'
+
+    UNION ALL
+
+    SELECT
+        f.RF_ID,
+        f.RF_PARENT_ID,
+        f.RF_NAME,
+        CAST(
+            p.Folder_Path + ' / ' + f.RF_NAME
+            AS VARCHAR(MAX)
+        ),
+        CAST(
+            CASE
+                WHEN p.Folder_Level = 0
+                THEN f.RF_NAME
+                ELSE p.Parent_Folder
+            END AS VARCHAR(255)
+        ),
+        p.Folder_Level + 1
+    FROM [amfc_isqat_db].[td].RELEASE_FOLDERS f
+    INNER JOIN FolderTree p
+        ON f.RF_PARENT_ID = p.RF_ID
+),
+
+ReleaseCycles AS
+(
+    SELECT
+        f.Parent_Folder,
         rel.REL_NAME AS Release_Name,
         rc.RCYC_ID,
         rc.RCYC_NAME AS Cycle_Name,
+
         CAST(rc.RCYC_START_DATE AS DATE)
             AS Cycle_Start,
+
         CAST(rc.RCYC_END_DATE AS DATE)
             AS Cycle_End,
+
         CAST(rc.RCYC_START_DATE AS DATE)
             AS Week1_Start,
 
-        COUNT(DISTINCT bg.BG_BUG_ID)
-            AS Total_Defects,
+        DATEADD(
+            DAY, 7,
+            CAST(rc.RCYC_START_DATE AS DATE)
+        ) AS Week1_End_Exclusive
 
-        COUNT(DISTINCT CASE
-            WHEN bg.BG_DETECTION_DATE >=
-                 CAST(rc.RCYC_START_DATE AS DATE)
-             AND bg.BG_DETECTION_DATE <
-                 DATEADD(
-                     DAY, 7,
-                     CAST(rc.RCYC_START_DATE AS DATE)
-                 )
-            THEN bg.BG_BUG_ID
-        END) AS First_Week_Defects
-
-    FROM [amfc_isqat_db].[td].RELEASE_CYCLES rc
-
-    INNER JOIN [amfc_isqat_db].[td].RELEASES rel
-        ON rel.REL_ID = rc.RCYC_PARENT_ID
-
-    LEFT JOIN [amfc_isqat_db].[td].BUG bg
-        ON bg.BG_DETECTED_IN_RCYC = rc.RCYC_ID
+    FROM [amfc_isqat_db].[td].RELEASES rel
+    JOIN FolderTree f
+      ON rel.REL_PARENT_ID = f.RF_ID
+    JOIN [amfc_isqat_db].[td].RELEASE_CYCLES rc
+      ON rc.RCYC_PARENT_ID = rel.REL_ID
 
     WHERE rc.RCYC_START_DATE >=
           DATEFROMPARTS(YEAR(GETDATE()), 1, 1)
       AND rc.RCYC_START_DATE <
           DATEFROMPARTS(YEAR(GETDATE()) + 1, 1, 1)
+),
 
-    GROUP BY
-        rel.REL_NAME,
+DefectMetrics AS
+(
+    SELECT
         rc.RCYC_ID,
-        rc.RCYC_NAME,
-        rc.RCYC_START_DATE,
-        rc.RCYC_END_DATE
+
+        COUNT(DISTINCT bg.BG_BUG_ID)
+            AS Total_Defects,
+
+        COUNT(DISTINCT CASE
+            WHEN bg.BG_DETECTION_DATE >= rc.Week1_Start
+             AND bg.BG_DETECTION_DATE <
+                 rc.Week1_End_Exclusive
+            THEN bg.BG_BUG_ID
+        END) AS First_Week_Defects
+
+    FROM ReleaseCycles rc
+
+    LEFT JOIN [amfc_isqat_db].[td].BUG bg
+      ON bg.BG_DETECTED_IN_RCYC = rc.RCYC_ID
+     AND bg.BG_DETECTION_DATE >= rc.Cycle_Start
+     AND bg.BG_DETECTION_DATE <
+         DATEADD(DAY, 1, rc.Cycle_End)
+
+    GROUP BY rc.RCYC_ID
+),
+
+RankedRuns AS
+(
+    SELECT
+        c.CY_ASSIGN_RCYC AS RCYC_ID,
+        r.RN_RUN_ID,
+        r.RN_TESTCYCL_ID,
+        r.RN_STATUS,
+        r.RN_EXECUTION_DATE,
+
+        ROW_NUMBER() OVER
+        (
+            PARTITION BY r.RN_TESTCYCL_ID
+            ORDER BY
+                r.RN_EXECUTION_DATE,
+                r.RN_EXECUTION_TIME,
+                r.RN_RUN_ID
+        ) AS RunRank
+
+    FROM [amfc_isqat_db].[td].RUN r
+    JOIN [amfc_isqat_db].[td].TESTCYCL tc
+      ON r.RN_TESTCYCL_ID = tc.TC_TESTCYCL_ID
+    JOIN [amfc_isqat_db].[td].CYCLE c
+      ON tc.TC_CYCLE_ID = c.CY_CYCLE_ID
+),
+
+ExecutionMetrics AS
+(
+    SELECT
+        rc.RCYC_ID,
+
+        COUNT(rr.RN_RUN_ID)
+            AS First_Run_Tests,
+
+        SUM(CASE
+            WHEN rr.RN_STATUS = 'Passed'
+            THEN 1 ELSE 0
+        END) AS First_Pass_Count,
+
+        SUM(CASE
+            WHEN rr.RN_STATUS = 'Failed'
+            THEN 1 ELSE 0
+        END) AS First_Fail_Count
+
+    FROM ReleaseCycles rc
+
+    LEFT JOIN RankedRuns rr
+      ON rr.RCYC_ID = rc.RCYC_ID
+     AND rr.RunRank = 1
+     AND rr.RN_EXECUTION_DATE >= rc.Week1_Start
+     AND rr.RN_EXECUTION_DATE <
+         rc.Week1_End_Exclusive
+
+    GROUP BY rc.RCYC_ID
 )
 
 SELECT
-    Release_Name,
-    Cycle_Name,
-    Cycle_Start,
-    Cycle_End,
-    Total_Defects,
-    First_Week_Defects,
+    rc.Parent_Folder,
+    rc.Release_Name,
+    rc.Cycle_Name,
+    rc.Cycle_Start,
+    rc.Cycle_End,
+
+    dm.Total_Defects,
+    dm.First_Week_Defects,
 
     CAST(
-        100.0 * First_Week_Defects /
-        NULLIF(Total_Defects, 0)
+        100.0 * dm.First_Week_Defects /
+        NULLIF(dm.Total_Defects, 0)
         AS DECIMAL(6,2)
-    ) AS First_Week_Defect_Percentage
+    ) AS First_Week_Defect_Percentage,
 
-FROM CycleDefects
+    em.First_Run_Tests,
+    em.First_Fail_Count,
+
+    CAST(
+        100.0 * em.First_Fail_Count /
+        NULLIF(em.First_Run_Tests, 0)
+        AS DECIMAL(6,2)
+    ) AS First_Run_Failure_Percentage,
+
+    CAST(
+        100.0 * em.First_Pass_Count /
+        NULLIF(em.First_Run_Tests, 0)
+        AS DECIMAL(6,2)
+    ) AS First_Pass_Percentage
+
+FROM ReleaseCycles rc
+LEFT JOIN DefectMetrics dm
+  ON dm.RCYC_ID = rc.RCYC_ID
+LEFT JOIN ExecutionMetrics em
+  ON em.RCYC_ID = rc.RCYC_ID
 
 ORDER BY
-    Release_Name,
-    Cycle_Start;
+    rc.Parent_Folder,
+    rc.Release_Name,
+    rc.Cycle_Start
+
+OPTION (MAXRECURSION 0);
