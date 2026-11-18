@@ -1,5 +1,6 @@
 
-WITH ReleaseCycles AS (
+
+;WITH ReleaseCycles AS (
     SELECT
         rel.REL_ID,
         rel.REL_NAME,
@@ -12,8 +13,8 @@ WITH ReleaseCycles AS (
             DAY, 7,
             CAST(rc.RCYC_START_DATE AS DATE)
         ) AS Week1_End_Exclusive
-    FROM RELEASE_CYCLES rc
-    INNER JOIN RELEASES rel
+    FROM [amfc_isqat_db].[td].RELEASE_CYCLES rc
+    INNER JOIN [amfc_isqat_db].[td].RELEASES rel
         ON rel.REL_ID = rc.RCYC_PARENT_ID
     WHERE rc.RCYC_START_DATE >=
           DATEFROMPARTS(YEAR(GETDATE()), 1, 1)
@@ -36,12 +37,12 @@ FirstRuns AS (
                 r.RN_EXECUTION_TIME,
                 r.RN_RUN_ID
         ) AS RunRank
-    FROM RUN r
-    INNER JOIN TESTCYCL tc
+    FROM [amfc_isqat_db].[td].RUN r
+    INNER JOIN [amfc_isqat_db].[td].TESTCYCL tc
         ON r.RN_TESTCYCL_ID = tc.TC_TESTCYCL_ID
-    INNER JOIN CYCLE c
+    INNER JOIN [amfc_isqat_db].[td].CYCLE c
         ON tc.TC_CYCLE_ID = c.CY_CYCLE_ID
-    LEFT JOIN CYCL_FOLD cf
+    LEFT JOIN [amfc_isqat_db].[td].CYCL_FOLD cf
         ON c.CY_FOLDER_ID = cf.CF_ITEM_ID
 ),
 
@@ -63,12 +64,13 @@ MetricRows AS (
             'Unspecified'
         ) AS Application,
 
-        COUNT(bg.BG_BUG_ID) AS Total_Defects,
+        COUNT(DISTINCT bg.BG_BUG_ID)
+            AS Total_Defects,
 
-        SUM(CASE
+        COUNT(DISTINCT CASE
             WHEN bg.BG_SEVERITY IN
-                 ('3-High', '4-Very High', '5-Urgent')
-            THEN 1 ELSE 0
+                ('3-High', '4-Very High', '5-Urgent')
+            THEN bg.BG_BUG_ID
         END) AS High_Defects,
 
         0 AS First_Run_Tests,
@@ -76,7 +78,7 @@ MetricRows AS (
         0 AS First_Fail
 
     FROM ReleaseCycles rc
-    INNER JOIN BUG bg
+    INNER JOIN [amfc_isqat_db].[td].BUG bg
         ON bg.BG_DETECTED_IN_RCYC = rc.RCYC_ID
        AND bg.BG_DETECTION_DATE >= rc.Week1_Start
        AND bg.BG_DETECTION_DATE <
@@ -91,7 +93,10 @@ MetricRows AS (
         rc.RCYC_END_DATE,
         rc.Week1_Start,
         rc.Week1_End_Exclusive,
-        COALESCE(NULLIF(bg.BG_PROJECT, ''), 'Unspecified')
+        COALESCE(
+            NULLIF(bg.BG_PROJECT, ''),
+            'Unspecified'
+        )
 
     UNION ALL
 
@@ -143,28 +148,44 @@ MetricRows AS (
         rc.RCYC_END_DATE,
         rc.Week1_Start,
         rc.Week1_End_Exclusive,
-        COALESCE(NULLIF(fr.Application, ''), 'Unspecified')
+        COALESCE(
+            NULLIF(fr.Application, ''),
+            'Unspecified'
+        )
 )
 
 SELECT
     YEAR(Week1_Start) AS Report_Year,
+
     Application,
+
     REL_NAME AS Release_Name,
+
     RCYC_NAME AS Cycle_Name,
 
     CAST(RCYC_START_DATE AS DATE) AS Cycle_Start,
+
     CAST(RCYC_END_DATE AS DATE) AS Cycle_End,
 
     Week1_Start,
+
     DATEADD(DAY, -1, Week1_End_Exclusive)
         AS Week1_End,
 
-    SUM(Total_Defects) AS First_Week_Defects,
-    SUM(High_Defects) AS High_Severity_Defects,
+    SUM(Total_Defects)
+        AS First_Week_Defects,
 
-    SUM(First_Run_Tests) AS First_Run_Tests,
-    SUM(First_Pass) AS First_Pass_Count,
-    SUM(First_Fail) AS First_Fail_Count,
+    SUM(High_Defects)
+        AS High_Severity_Defects,
+
+    SUM(First_Run_Tests)
+        AS First_Run_Tests,
+
+    SUM(First_Pass)
+        AS First_Pass_Count,
+
+    SUM(First_Fail)
+        AS First_Fail_Count,
 
     CAST(
         100.0 * SUM(First_Pass) /
@@ -179,6 +200,7 @@ SELECT
     ) AS First_Fail_Percentage
 
 FROM MetricRows
+
 GROUP BY
     Application,
     REL_NAME,
