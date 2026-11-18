@@ -5,7 +5,6 @@
         RF_ID,
         RF_PARENT_ID,
         RF_NAME,
-        CAST(RF_NAME AS VARCHAR(MAX)) AS Folder_Path,
         CAST(RF_NAME AS VARCHAR(255)) AS Parent_Folder,
         0 AS Folder_Level
     FROM [amfc_isqat_db].[td].RELEASE_FOLDERS
@@ -18,10 +17,6 @@
         f.RF_PARENT_ID,
         f.RF_NAME,
         CAST(
-            p.Folder_Path + ' / ' + f.RF_NAME
-            AS VARCHAR(MAX)
-        ),
-        CAST(
             CASE
                 WHEN p.Folder_Level = 0
                 THEN f.RF_NAME
@@ -30,8 +25,8 @@
         ),
         p.Folder_Level + 1
     FROM [amfc_isqat_db].[td].RELEASE_FOLDERS f
-    INNER JOIN FolderTree p
-        ON f.RF_PARENT_ID = p.RF_ID
+    JOIN FolderTree p
+      ON f.RF_PARENT_ID = p.RF_ID
 ),
 
 ReleaseCycles AS
@@ -48,196 +43,257 @@ ReleaseCycles AS
         CAST(rc.RCYC_END_DATE AS DATE)
             AS Cycle_End,
 
-        CAST(rc.RCYC_START_DATE AS DATE)
-            AS Week1_Start,
+        CAST(rel.REL_END_DATE AS DATE)
+            AS Release_End,
 
-        DATEADD(
-            DAY, 7,
-            CAST(rc.RCYC_START_DATE AS DATE)
-        ) AS Week1_End_Exclusive
+        cap.Report_End
 
     FROM [amfc_isqat_db].[td].RELEASES rel
+    JOIN FolderTree f
+      ON rel.REL_PARENT_ID = f.RF_ID
+    JOIN [amfc_isqat_db].[td].RELEASE_CYCLES rc
+      ON rc.RCYC_PARENT_ID = rel.REL_ID
 
-    INNER JOIN FolderTree f
-        ON rel.REL_PARENT_ID = f.RF_ID
+    CROSS APPLY
+    (
+        SELECT MIN(v.End_Date) AS Report_End
+        FROM (VALUES
+            (CAST(rc.RCYC_END_DATE AS DATE)),
+            (CAST(rel.REL_END_DATE AS DATE)),
+            (CAST(GETDATE() AS DATE))
+        ) v(End_Date)
+    ) cap
 
-    INNER JOIN [amfc_isqat_db].[td].RELEASE_CYCLES rc
-        ON rc.RCYC_PARENT_ID = rel.REL_ID
-
-    WHERE rc.RCYC_START_DATE >=
-          DATEFROMPARTS(YEAR(GETDATE()), 1, 1)
-      AND rc.RCYC_START_DATE <
-          DATEFROMPARTS(YEAR(GETDATE()) + 1, 1, 1)
+    WHERE rc.RCYC_START_DATE >= '2026-01-01'
+      AND rc.RCYC_START_DATE < '2027-01-01'
+      AND rc.RCYC_START_DATE IS NOT NULL
+      AND CAST(rc.RCYC_START_DATE AS DATE)
+          <= cap.Report_End
 ),
 
-DefectMetrics AS
+WeeklyPeriods AS
 (
+    -- First week
     SELECT
         rc.RCYC_ID,
+        1 AS Week_Number,
+        rc.Cycle_Start AS Week_Start,
+        rc.Report_End,
 
-        COUNT(DISTINCT bg.BG_BUG_ID)
-            AS Total_Defects,
-
-        COUNT(DISTINCT CASE
-            WHEN bg.BG_DETECTION_DATE >= rc.Week1_Start
-             AND bg.BG_DETECTION_DATE <
-                 rc.Week1_End_Exclusive
-            THEN bg.BG_BUG_ID
-        END) AS First_Week_Defects
+        CASE
+            WHEN DATEADD(DAY, 7, rc.Cycle_Start)
+                 > DATEADD(DAY, 1, rc.Report_End)
+            THEN DATEADD(DAY, 1, rc.Report_End)
+            ELSE DATEADD(DAY, 7, rc.Cycle_Start)
+        END AS Week_End_Exclusive
 
     FROM ReleaseCycles rc
 
-    LEFT JOIN [amfc_isqat_db].[td].BUG bg
-        ON bg.BG_DETECTED_IN_RCYC = rc.RCYC_ID
-       AND bg.BG_DETECTION_DATE >= rc.Cycle_Start
-       AND bg.BG_DETECTION_DATE <
-           DATEADD(DAY, 1, rc.Cycle_End)
+    UNION ALL
 
-    GROUP BY rc.RCYC_ID
+    -- Subsequent weeks
+    SELECT
+        wp.RCYC_ID,
+        wp.Week_Number + 1,
+        wp.Week_End_Exclusive,
+        wp.Report_End,
+
+        CASE
+            WHEN DATEADD(DAY, 7, wp.Week_End_Exclusive)
+                 > DATEADD(DAY, 1, wp.Report_End)
+            THEN DATEADD(DAY, 1, wp.Report_End)
+            ELSE DATEADD(DAY, 7, wp.Week_End_Exclusive)
+        END
+
+    FROM WeeklyPeriods wp
+    WHERE wp.Week_End_Exclusive
+          <= wp.Report_End
 ),
 
--- All execution runs, including repeat runs
+WeeklyDefects AS
+(
+    SELECT
+        wp.RCYC_ID,
+        wp.Week_Number,
+
+        COUNT(DISTINCT bg.BG_BUG_ID)
+            AS Weekly_Defects
+
+    FROM WeeklyPeriods wp
+
+    LEFT JOIN [amfc_isqat_db].[td].BUG bg
+      ON bg.BG_DETECTED_IN_RCYC = wp.RCYC_ID
+     AND bg.BG_DETECTION_DATE >= wp.Week_Start
+     AND bg.BG_DETECTION_DATE <
+         wp.Week_End_Exclusive
+
+    GROUP BY
+        wp.RCYC_ID,
+        wp.Week_Number
+),
+
 AllRuns AS
 (
     SELECT
         c.CY_ASSIGN_RCYC AS RCYC_ID,
         r.RN_RUN_ID,
-        r.RN_TESTCYCL_ID,
         r.RN_STATUS,
         r.RN_EXECUTION_DATE
 
     FROM [amfc_isqat_db].[td].RUN r
 
-    INNER JOIN [amfc_isqat_db].[td].TESTCYCL tc
-        ON r.RN_TESTCYCL_ID = tc.TC_TESTCYCL_ID
+    JOIN [amfc_isqat_db].[td].TESTCYCL tc
+      ON r.RN_TESTCYCL_ID = tc.TC_TESTCYCL_ID
 
-    INNER JOIN [amfc_isqat_db].[td].CYCLE c
-        ON tc.TC_CYCLE_ID = c.CY_CYCLE_ID
+    JOIN [amfc_isqat_db].[td].CYCLE c
+      ON tc.TC_CYCLE_ID = c.CY_CYCLE_ID
 ),
 
-ExecutionMetrics AS
+WeeklyExecutions AS
 (
     SELECT
-        rc.RCYC_ID,
+        wp.RCYC_ID,
+        wp.Week_Number,
 
-        -- All runs across the entire cycle
         COUNT(ar.RN_RUN_ID)
-            AS Total_Execution_Runs,
+            AS Total_Runs,
 
         SUM(CASE
             WHEN ar.RN_STATUS = 'Passed'
             THEN 1 ELSE 0
-        END) AS Total_Passed_Runs,
+        END) AS Passed_Runs,
 
         SUM(CASE
             WHEN ar.RN_STATUS = 'Failed'
             THEN 1 ELSE 0
-        END) AS Total_Failed_Runs,
+        END) AS Failed_Runs,
 
         SUM(CASE
-            WHEN ar.RN_STATUS NOT IN ('Passed', 'Failed')
-                 OR ar.RN_STATUS IS NULL
+            WHEN ar.RN_RUN_ID IS NOT NULL
+             AND (
+                  ar.RN_STATUS NOT IN ('Passed','Failed')
+                  OR ar.RN_STATUS IS NULL
+             )
             THEN 1 ELSE 0
-        END) AS Other_Status_Runs,
+        END) AS Other_Runs
 
-        -- All runs during the first 7 days
-        SUM(CASE
-            WHEN ar.RN_EXECUTION_DATE >= rc.Week1_Start
-             AND ar.RN_EXECUTION_DATE <
-                 rc.Week1_End_Exclusive
-            THEN 1 ELSE 0
-        END) AS First_Week_Runs,
+    FROM WeeklyPeriods wp
 
-        SUM(CASE
-            WHEN ar.RN_STATUS = 'Passed'
-             AND ar.RN_EXECUTION_DATE >= rc.Week1_Start
-             AND ar.RN_EXECUTION_DATE <
-                 rc.Week1_End_Exclusive
-            THEN 1 ELSE 0
-        END) AS First_Week_Passed_Runs,
+    LEFT JOIN AllRuns ar
+      ON ar.RCYC_ID = wp.RCYC_ID
+     AND ar.RN_EXECUTION_DATE >= wp.Week_Start
+     AND ar.RN_EXECUTION_DATE <
+         wp.Week_End_Exclusive
 
-        SUM(CASE
-            WHEN ar.RN_STATUS = 'Failed'
-             AND ar.RN_EXECUTION_DATE >= rc.Week1_Start
-             AND ar.RN_EXECUTION_DATE <
-                 rc.Week1_End_Exclusive
-            THEN 1 ELSE 0
-        END) AS First_Week_Failed_Runs
+    GROUP BY
+        wp.RCYC_ID,
+        wp.Week_Number
+),
+
+WeeklySummary AS
+(
+    SELECT
+        rc.Parent_Folder,
+        rc.Release_Name,
+        rc.Cycle_Name,
+        rc.RCYC_ID,
+        rc.Cycle_Start,
+        rc.Cycle_End,
+        rc.Release_End,
+
+        wp.Week_Number,
+        wp.Week_Start,
+
+        DATEADD(DAY, -1, wp.Week_End_Exclusive)
+            AS Week_End,
+
+        wd.Weekly_Defects,
+        we.Total_Runs,
+        we.Passed_Runs,
+        we.Failed_Runs,
+        we.Other_Runs
 
     FROM ReleaseCycles rc
 
-    LEFT JOIN AllRuns ar
-        ON ar.RCYC_ID = rc.RCYC_ID
-       AND ar.RN_EXECUTION_DATE >= rc.Cycle_Start
-       AND ar.RN_EXECUTION_DATE <
-           DATEADD(DAY, 1, rc.Cycle_End)
+    JOIN WeeklyPeriods wp
+      ON wp.RCYC_ID = rc.RCYC_ID
 
-    GROUP BY rc.RCYC_ID
+    LEFT JOIN WeeklyDefects wd
+      ON wd.RCYC_ID = wp.RCYC_ID
+     AND wd.Week_Number = wp.Week_Number
+
+    LEFT JOIN WeeklyExecutions we
+      ON we.RCYC_ID = wp.RCYC_ID
+     AND we.Week_Number = wp.Week_Number
+),
+
+WithTotals AS
+(
+    SELECT
+        ws.*,
+
+        SUM(Weekly_Defects) OVER
+        (
+            PARTITION BY RCYC_ID
+        ) AS Total_Cycle_Defects,
+
+        SUM(Weekly_Defects) OVER
+        (
+            PARTITION BY RCYC_ID
+            ORDER BY Week_Number
+            ROWS BETWEEN UNBOUNDED PRECEDING
+                     AND CURRENT ROW
+        ) AS Cumulative_Defects
+
+    FROM WeeklySummary ws
 )
 
 SELECT
-    rc.Parent_Folder,
-    rc.Release_Name,
-    rc.Cycle_Name,
-    rc.Cycle_Start,
-    rc.Cycle_End,
+    Parent_Folder,
+    Release_Name,
+    Cycle_Name,
 
-    -- Defect metrics
-    dm.Total_Defects,
-    dm.First_Week_Defects,
+    Cycle_Start,
+    Cycle_End,
+    Release_End,
 
-    CAST(
-        100.0 * dm.First_Week_Defects /
-        NULLIF(dm.Total_Defects, 0)
-        AS DECIMAL(6,2)
-    ) AS First_Week_Defect_Percentage,
+    CONCAT('Week ', Week_Number) AS Week_Name,
+    Week_Start,
+    Week_End,
 
-    -- Complete cycle execution metrics
-    em.Total_Execution_Runs,
-    em.Total_Passed_Runs,
-    em.Total_Failed_Runs,
-    em.Other_Status_Runs,
+    Total_Cycle_Defects,
+    Weekly_Defects,
+    Cumulative_Defects,
 
     CAST(
-        100.0 * em.Total_Passed_Runs /
-        NULLIF(em.Total_Execution_Runs, 0)
+        100.0 * Weekly_Defects /
+        NULLIF(Total_Cycle_Defects, 0)
         AS DECIMAL(6,2)
-    ) AS Overall_Run_Pass_Percentage,
+    ) AS Weekly_Defect_Percentage,
+
+    Total_Runs,
+    Passed_Runs,
+    Failed_Runs,
+    Other_Runs,
 
     CAST(
-        100.0 * em.Total_Failed_Runs /
-        NULLIF(em.Total_Execution_Runs, 0)
+        100.0 * Passed_Runs /
+        NULLIF(Total_Runs, 0)
         AS DECIMAL(6,2)
-    ) AS Overall_Run_Failure_Percentage,
-
-    -- First-week execution metrics
-    em.First_Week_Runs,
-    em.First_Week_Passed_Runs,
-    em.First_Week_Failed_Runs,
+    ) AS Weekly_Pass_Percentage,
 
     CAST(
-        100.0 * em.First_Week_Passed_Runs /
-        NULLIF(em.First_Week_Runs, 0)
+        100.0 * Failed_Runs /
+        NULLIF(Total_Runs, 0)
         AS DECIMAL(6,2)
-    ) AS First_Week_Run_Pass_Percentage,
+    ) AS Weekly_Failure_Percentage
 
-    CAST(
-        100.0 * em.First_Week_Failed_Runs /
-        NULLIF(em.First_Week_Runs, 0)
-        AS DECIMAL(6,2)
-    ) AS First_Week_Run_Failure_Percentage
-
-FROM ReleaseCycles rc
-
-LEFT JOIN DefectMetrics dm
-    ON dm.RCYC_ID = rc.RCYC_ID
-
-LEFT JOIN ExecutionMetrics em
-    ON em.RCYC_ID = rc.RCYC_ID
+FROM WithTotals
 
 ORDER BY
-    rc.Parent_Folder,
-    rc.Release_Name,
-    rc.Cycle_Start
+    Parent_Folder,
+    Release_Name,
+    Cycle_Start,
+    Week_Number
 
 OPTION (MAXRECURSION 0);
