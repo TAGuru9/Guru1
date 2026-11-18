@@ -1,36 +1,196 @@
 
+SET NOCOUNT ON;
 
-;WITH ReleaseCycles AS (
+DECLARE @AppColumn SYSNAME = NULL;
+DECLARE @Column SYSNAME;
+DECLARE @MatchCount INT;
+DECLARE @FoundColumns INT = 0;
+DECLARE @SQL NVARCHAR(MAX);
+
+-- STEP 1: Find the Application custom field.
+-- The screenshot confirms that the Centauri test set
+-- has Application = Data lake 2.0.
+
+DECLARE AppFields CURSOR LOCAL FAST_FORWARD FOR
+SELECT COLUMN_NAME
+FROM [amfc_isqat_db].INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = 'td'
+  AND TABLE_NAME = 'CYCLE'
+  AND (
+       COLUMN_NAME LIKE 'CY_USER[_]%'
+       OR COLUMN_NAME LIKE '%APPLICATION%'
+  )
+  AND DATA_TYPE IN
+      ('varchar','nvarchar','char','nchar');
+
+OPEN AppFields;
+FETCH NEXT FROM AppFields INTO @Column;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @MatchCount = 0;
+
+    SET @SQL = N'
+        SELECT @CountOut = COUNT(*)
+        FROM [amfc_isqat_db].[td].CYCLE
+        WHERE LTRIM(RTRIM('
+        + QUOTENAME(@Column) +
+        N')) = N''Data lake 2.0''
+          AND CY_CYCLE LIKE
+              N''%Centauri Fetch and Notify Extract%''';
+
+    EXEC sp_executesql
+        @SQL,
+        N'@CountOut INT OUTPUT',
+        @CountOut = @MatchCount OUTPUT;
+
+    IF @MatchCount > 0
+    BEGIN
+        SET @FoundColumns = @FoundColumns + 1;
+        SET @AppColumn = @Column;
+    END;
+
+    FETCH NEXT FROM AppFields INTO @Column;
+END;
+
+CLOSE AppFields;
+DEALLOCATE AppFields;
+
+IF @FoundColumns <> 1
+BEGIN
     SELECT
+        @FoundColumns AS Matching_Columns,
+        'Application mapping could not be uniquely
+         identified. Check CYCLE custom fields.'
+         AS Diagnostic_Message;
+END
+ELSE
+BEGIN
+    SELECT @AppColumn AS Detected_Application_Column;
+
+    -- STEP 2: Produce the complete report.
+
+    SET @SQL = N'
+;WITH ReleaseFolders AS
+(
+    SELECT
+        RF_ID,
+        RF_PARENT_ID,
+        RF_NAME,
+        CAST(RF_NAME AS NVARCHAR(MAX))
+            AS Folder_Path,
+        CAST(''All'' AS NVARCHAR(255))
+            AS Release_Category,
+        0 AS Folder_Level
+    FROM [amfc_isqat_db].[td].RELEASE_FOLDERS
+    WHERE RF_NAME = ''2026 Releases''
+
+    UNION ALL
+
+    SELECT
+        f.RF_ID,
+        f.RF_PARENT_ID,
+        f.RF_NAME,
+        CAST(
+            p.Folder_Path + N'' / '' + f.RF_NAME
+            AS NVARCHAR(MAX)
+        ),
+        CAST(
+            CASE WHEN p.Folder_Level = 0
+                 THEN f.RF_NAME
+                 ELSE p.Release_Category
+            END AS NVARCHAR(255)
+        ),
+        p.Folder_Level + 1
+    FROM [amfc_isqat_db].[td].RELEASE_FOLDERS f
+    JOIN ReleaseFolders p
+      ON f.RF_PARENT_ID = p.RF_ID
+),
+
+ReleaseCycles AS
+(
+    SELECT
+        f.Release_Category,
+        f.Folder_Path AS Release_Folder_Path,
         rel.REL_ID,
         rel.REL_NAME,
+        rel.REL_START_DATE,
+        rel.REL_END_DATE,
         rc.RCYC_ID,
         rc.RCYC_NAME,
         rc.RCYC_START_DATE,
         rc.RCYC_END_DATE,
-        CAST(rc.RCYC_START_DATE AS DATE) AS Week1_Start,
+        CAST(rc.RCYC_START_DATE AS DATE)
+            AS Week1_Start,
         DATEADD(
             DAY, 7,
             CAST(rc.RCYC_START_DATE AS DATE)
         ) AS Week1_End_Exclusive
-    FROM [amfc_isqat_db].[td].RELEASE_CYCLES rc
-    INNER JOIN [amfc_isqat_db].[td].RELEASES rel
-        ON rel.REL_ID = rc.RCYC_PARENT_ID
+    FROM [amfc_isqat_db].[td].RELEASES rel
+    JOIN ReleaseFolders f
+      ON rel.REL_PARENT_ID = f.RF_ID
+    JOIN [amfc_isqat_db].[td].RELEASE_CYCLES rc
+      ON rc.RCYC_PARENT_ID = rel.REL_ID
     WHERE rc.RCYC_START_DATE >=
           DATEFROMPARTS(YEAR(GETDATE()), 1, 1)
       AND rc.RCYC_START_DATE <
           DATEFROMPARTS(YEAR(GETDATE()) + 1, 1, 1)
 ),
 
-FirstRuns AS (
+TestFolders AS
+(
+    SELECT
+        CF_ITEM_ID,
+        CF_FATHER_ID,
+        CAST(CF_ITEM_NAME AS NVARCHAR(MAX))
+            AS Test_Lab_Path,
+        0 AS Folder_Level
+    FROM [amfc_isqat_db].[td].CYCL_FOLD
+    WHERE CF_FATHER_ID IS NULL
+       OR CF_FATHER_ID <= 0
+
+    UNION ALL
+
+    SELECT
+        f.CF_ITEM_ID,
+        f.CF_FATHER_ID,
+        CAST(
+            p.Test_Lab_Path + N'' / '' + f.CF_ITEM_NAME
+            AS NVARCHAR(MAX)
+        ),
+        p.Folder_Level + 1
+    FROM [amfc_isqat_db].[td].CYCL_FOLD f
+    JOIN TestFolders p
+      ON f.CF_FATHER_ID = p.CF_ITEM_ID
+),
+
+TestSets AS
+(
+    SELECT
+        c.CY_CYCLE_ID AS Test_Set_ID,
+        c.CY_CYCLE AS Test_Set_Name,
+        c.CY_STATUS AS Test_Set_Status,
+        c.CY_OPEN_DATE AS Test_Set_Open_Date,
+        c.CY_CLOSE_DATE AS Test_Set_Close_Date,
+        c.CY_ASSIGN_RCYC AS Release_Cycle_ID,
+        CAST(c.' + QUOTENAME(@AppColumn) + N'
+             AS NVARCHAR(255)) AS Application,
+        tf.Test_Lab_Path
+    FROM [amfc_isqat_db].[td].CYCLE c
+    LEFT JOIN TestFolders tf
+      ON c.CY_FOLDER_ID = tf.CF_ITEM_ID
+),
+
+FirstRuns AS
+(
     SELECT
         r.RN_TESTCYCL_ID,
         r.RN_RUN_ID,
         r.RN_STATUS,
         r.RN_EXECUTION_DATE,
-        c.CY_ASSIGN_RCYC,
-        cf.CF_ITEM_NAME AS Application,
-        ROW_NUMBER() OVER (
+        tc.TC_CYCLE_ID AS Test_Set_ID,
+        ROW_NUMBER() OVER
+        (
             PARTITION BY r.RN_TESTCYCL_ID
             ORDER BY
                 r.RN_EXECUTION_DATE,
@@ -38,179 +198,141 @@ FirstRuns AS (
                 r.RN_RUN_ID
         ) AS RunRank
     FROM [amfc_isqat_db].[td].RUN r
-    INNER JOIN [amfc_isqat_db].[td].TESTCYCL tc
-        ON r.RN_TESTCYCL_ID = tc.TC_TESTCYCL_ID
-    INNER JOIN [amfc_isqat_db].[td].CYCLE c
-        ON tc.TC_CYCLE_ID = c.CY_CYCLE_ID
-    LEFT JOIN [amfc_isqat_db].[td].CYCL_FOLD cf
-        ON c.CY_FOLDER_ID = cf.CF_ITEM_ID
+    JOIN [amfc_isqat_db].[td].TESTCYCL tc
+      ON r.RN_TESTCYCL_ID = tc.TC_TESTCYCL_ID
 ),
 
-MetricRows AS (
-
-    -- First-week defects
+ExecutionMetrics AS
+(
     SELECT
-        rc.REL_ID,
-        rc.REL_NAME,
+        ts.Test_Set_ID,
         rc.RCYC_ID,
-        rc.RCYC_NAME,
-        rc.RCYC_START_DATE,
-        rc.RCYC_END_DATE,
-        rc.Week1_Start,
-        rc.Week1_End_Exclusive,
+        COUNT(fr.RN_RUN_ID) AS First_Run_Tests,
+        SUM(CASE
+            WHEN fr.RN_STATUS = ''Passed''
+            THEN 1 ELSE 0
+        END) AS First_Pass_Count,
+        SUM(CASE
+            WHEN fr.RN_STATUS = ''Failed''
+            THEN 1 ELSE 0
+        END) AS First_Fail_Count
+    FROM ReleaseCycles rc
+    JOIN TestSets ts
+      ON ts.Release_Cycle_ID = rc.RCYC_ID
+    LEFT JOIN FirstRuns fr
+      ON fr.Test_Set_ID = ts.Test_Set_ID
+     AND fr.RunRank = 1
+     AND fr.RN_EXECUTION_DATE >= rc.Week1_Start
+     AND fr.RN_EXECUTION_DATE <
+         rc.Week1_End_Exclusive
+    GROUP BY ts.Test_Set_ID, rc.RCYC_ID
+),
 
-        COALESCE(
-            NULLIF(bg.BG_PROJECT, ''),
-            'Unspecified'
-        ) AS Application,
-
+DefectMetrics AS
+(
+    SELECT
+        rc.RCYC_ID,
         COUNT(DISTINCT bg.BG_BUG_ID)
-            AS Total_Defects,
-
+            AS First_Week_Defects,
         COUNT(DISTINCT CASE
             WHEN bg.BG_SEVERITY IN
-                ('3-High', '4-Very High', '5-Urgent')
+            (
+                ''3-High'',
+                ''4-Very High'',
+                ''5-Urgent''
+            )
             THEN bg.BG_BUG_ID
-        END) AS High_Defects,
-
-        0 AS First_Run_Tests,
-        0 AS First_Pass,
-        0 AS First_Fail
-
+        END) AS High_Severity_Defects
     FROM ReleaseCycles rc
-    INNER JOIN [amfc_isqat_db].[td].BUG bg
-        ON bg.BG_DETECTED_IN_RCYC = rc.RCYC_ID
-       AND bg.BG_DETECTION_DATE >= rc.Week1_Start
-       AND bg.BG_DETECTION_DATE <
-           rc.Week1_End_Exclusive
-
-    GROUP BY
-        rc.REL_ID,
-        rc.REL_NAME,
-        rc.RCYC_ID,
-        rc.RCYC_NAME,
-        rc.RCYC_START_DATE,
-        rc.RCYC_END_DATE,
-        rc.Week1_Start,
-        rc.Week1_End_Exclusive,
-        COALESCE(
-            NULLIF(bg.BG_PROJECT, ''),
-            'Unspecified'
-        )
-
-    UNION ALL
-
-    -- First-pass execution metrics
-    SELECT
-        rc.REL_ID,
-        rc.REL_NAME,
-        rc.RCYC_ID,
-        rc.RCYC_NAME,
-        rc.RCYC_START_DATE,
-        rc.RCYC_END_DATE,
-        rc.Week1_Start,
-        rc.Week1_End_Exclusive,
-
-        COALESCE(
-            NULLIF(fr.Application, ''),
-            'Unspecified'
-        ) AS Application,
-
-        0 AS Total_Defects,
-        0 AS High_Defects,
-
-        COUNT(*) AS First_Run_Tests,
-
-        SUM(CASE
-            WHEN fr.RN_STATUS = 'Passed'
-            THEN 1 ELSE 0
-        END) AS First_Pass,
-
-        SUM(CASE
-            WHEN fr.RN_STATUS = 'Failed'
-            THEN 1 ELSE 0
-        END) AS First_Fail
-
-    FROM ReleaseCycles rc
-    INNER JOIN FirstRuns fr
-        ON fr.CY_ASSIGN_RCYC = rc.RCYC_ID
-       AND fr.RunRank = 1
-       AND fr.RN_EXECUTION_DATE >= rc.Week1_Start
-       AND fr.RN_EXECUTION_DATE <
-           rc.Week1_End_Exclusive
-
-    GROUP BY
-        rc.REL_ID,
-        rc.REL_NAME,
-        rc.RCYC_ID,
-        rc.RCYC_NAME,
-        rc.RCYC_START_DATE,
-        rc.RCYC_END_DATE,
-        rc.Week1_Start,
-        rc.Week1_End_Exclusive,
-        COALESCE(
-            NULLIF(fr.Application, ''),
-            'Unspecified'
-        )
+    LEFT JOIN [amfc_isqat_db].[td].BUG bg
+      ON bg.BG_DETECTED_IN_RCYC = rc.RCYC_ID
+     AND bg.BG_DETECTION_DATE >= rc.Week1_Start
+     AND bg.BG_DETECTION_DATE <
+         rc.Week1_End_Exclusive
+    GROUP BY rc.RCYC_ID
 )
 
 SELECT
-    YEAR(Week1_Start) AS Report_Year,
+    YEAR(rc.RCYC_START_DATE) AS Report_Year,
+    rc.Release_Category,
+    rc.Release_Folder_Path,
 
-    Application,
+    COALESCE(
+        NULLIF(ts.Application, ''''),
+        ''Unspecified''
+    ) AS Application,
 
-    REL_NAME AS Release_Name,
+    rc.REL_ID AS Release_ID,
+    rc.REL_NAME AS Release_Name,
+    CAST(rc.REL_START_DATE AS DATE)
+        AS Release_Start,
+    CAST(rc.REL_END_DATE AS DATE)
+        AS Release_End,
 
-    RCYC_NAME AS Cycle_Name,
+    rc.RCYC_ID AS Cycle_ID,
+    rc.RCYC_NAME AS Cycle_Name,
+    CAST(rc.RCYC_START_DATE AS DATE)
+        AS Cycle_Start,
+    CAST(rc.RCYC_END_DATE AS DATE)
+        AS Cycle_End,
 
-    CAST(RCYC_START_DATE AS DATE) AS Cycle_Start,
-
-    CAST(RCYC_END_DATE AS DATE) AS Cycle_End,
-
-    Week1_Start,
-
-    DATEADD(DAY, -1, Week1_End_Exclusive)
+    rc.Week1_Start,
+    DATEADD(DAY, -1, rc.Week1_End_Exclusive)
         AS Week1_End,
 
-    SUM(Total_Defects)
-        AS First_Week_Defects,
+    ts.Test_Set_ID,
+    ts.Test_Set_Name,
+    ts.Test_Set_Status,
+    ts.Test_Lab_Path,
+    CAST(ts.Test_Set_Open_Date AS DATE)
+        AS Test_Set_Open_Date,
+    CAST(ts.Test_Set_Close_Date AS DATE)
+        AS Test_Set_Close_Date,
 
-    SUM(High_Defects)
-        AS High_Severity_Defects,
+    dm.First_Week_Defects
+        AS Cycle_First_Week_Defects,
+    dm.High_Severity_Defects
+        AS Cycle_High_Severity_Defects,
 
-    SUM(First_Run_Tests)
-        AS First_Run_Tests,
+    em.First_Run_Tests,
+    em.First_Pass_Count,
+    em.First_Fail_Count,
 
-    SUM(First_Pass)
-        AS First_Pass_Count,
-
-    SUM(First_Fail)
-        AS First_Fail_Count,
+    em.First_Run_Tests
+       - em.First_Pass_Count
+       - em.First_Fail_Count
+       AS First_Run_Other_Status_Count,
 
     CAST(
-        100.0 * SUM(First_Pass) /
-        NULLIF(SUM(First_Run_Tests), 0)
+        100.0 * em.First_Pass_Count /
+        NULLIF(em.First_Run_Tests, 0)
         AS DECIMAL(6,2)
     ) AS First_Pass_Percentage,
 
     CAST(
-        100.0 * SUM(First_Fail) /
-        NULLIF(SUM(First_Run_Tests), 0)
+        100.0 * em.First_Fail_Count /
+        NULLIF(em.First_Run_Tests, 0)
         AS DECIMAL(6,2)
     ) AS First_Fail_Percentage
 
-FROM MetricRows
-
-GROUP BY
-    Application,
-    REL_NAME,
-    RCYC_NAME,
-    RCYC_START_DATE,
-    RCYC_END_DATE,
-    Week1_Start,
-    Week1_End_Exclusive
+FROM ReleaseCycles rc
+LEFT JOIN TestSets ts
+  ON ts.Release_Cycle_ID = rc.RCYC_ID
+LEFT JOIN ExecutionMetrics em
+  ON em.Test_Set_ID = ts.Test_Set_ID
+ AND em.RCYC_ID = rc.RCYC_ID
+LEFT JOIN DefectMetrics dm
+  ON dm.RCYC_ID = rc.RCYC_ID
 
 ORDER BY
-    Release_Name,
+    rc.Release_Category,
     Application,
-    Cycle_Start;
+    rc.REL_NAME,
+    rc.RCYC_START_DATE,
+    ts.Test_Set_Name
+
+OPTION (MAXRECURSION 0);
+';
+
+    EXEC sp_executesql @SQL;
+END;
