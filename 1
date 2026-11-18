@@ -1,22 +1,194 @@
-Thank you for sharing the defect analysis and recommendations.
 
-I agree that identifying recurring defect trends and implementing preventive measures earlier in the development cycle will help improve overall quality.
+WITH ReleaseCycles AS (
+    SELECT
+        rel.REL_ID,
+        rel.REL_NAME,
+        rc.RCYC_ID,
+        rc.RCYC_NAME,
+        rc.RCYC_START_DATE,
+        rc.RCYC_END_DATE,
+        CAST(rc.RCYC_START_DATE AS DATE) AS Week1_Start,
+        DATEADD(
+            DAY, 7,
+            CAST(rc.RCYC_START_DATE AS DATE)
+        ) AS Week1_End_Exclusive
+    FROM RELEASE_CYCLES rc
+    INNER JOIN RELEASES rel
+        ON rel.REL_ID = rc.RCYC_PARENT_ID
+    WHERE rc.RCYC_START_DATE >=
+          DATEFROMPARTS(YEAR(GETDATE()), 1, 1)
+      AND rc.RCYC_START_DATE <
+          DATEFROMPARTS(YEAR(GETDATE()) + 1, 1, 1)
+),
 
-One question worth reflecting on is why we haven’t identified and addressed some of these opportunities earlier. Understanding whether there were gaps in our existing processes, communication, or ownership will help us make sustainable improvements.
+FirstRuns AS (
+    SELECT
+        r.RN_TESTCYCL_ID,
+        r.RN_RUN_ID,
+        r.RN_STATUS,
+        r.RN_EXECUTION_DATE,
+        c.CY_ASSIGN_RCYC,
+        cf.CF_ITEM_NAME AS Application,
+        ROW_NUMBER() OVER (
+            PARTITION BY r.RN_TESTCYCL_ID
+            ORDER BY
+                r.RN_EXECUTION_DATE,
+                r.RN_EXECUTION_TIME,
+                r.RN_RUN_ID
+        ) AS RunRank
+    FROM RUN r
+    INNER JOIN TESTCYCL tc
+        ON r.RN_TESTCYCL_ID = tc.TC_TESTCYCL_ID
+    INNER JOIN CYCLE c
+        ON tc.TC_CYCLE_ID = c.CY_CYCLE_ID
+    LEFT JOIN CYCL_FOLD cf
+        ON c.CY_FOLDER_ID = cf.CF_ITEM_ID
+),
 
-From the Test Automation perspective, Komali already has two automated suites ready — Smoke and Health Check. While we work toward integrating these suites into the CI/CD pipeline, I would like Komali to be included in all relevant deployment communications.
+MetricRows AS (
 
-This will allow us to establish an interim process where:
+    -- First-week defects
+    SELECT
+        rc.REL_ID,
+        rc.REL_NAME,
+        rc.RCYC_ID,
+        rc.RCYC_NAME,
+        rc.RCYC_START_DATE,
+        rc.RCYC_END_DATE,
+        rc.Week1_Start,
+        rc.Week1_End_Exclusive,
 
-* Deployment Team: Notifies Komali once the deployment is completed and the environment is ready.
-* Test Automation (Komali): Executes the Smoke and Health Check suites immediately after deployment.
-* TA Team: Reviews the execution results, reports any critical failures, and confirms build readiness from an automation perspective.
-* QA Team: Receives the build handoff once the required checks pass and proceeds with further testing.
+        COALESCE(
+            NULLIF(bg.BG_PROJECT, ''),
+            'Unspecified'
+        ) AS Application,
 
-This approach allows us to start realizing the benefits of shift-left testing immediately rather than waiting for full CI/CD integration.
+        COUNT(bg.BG_BUG_ID) AS Total_Defects,
 
-I also support the recommendations around QA readiness checklists, environment and test data validation, and early identification of requirement gaps.
+        SUM(CASE
+            WHEN bg.BG_SEVERITY IN
+                 ('3-High', '4-Very High', '5-Urgent')
+            THEN 1 ELSE 0
+        END) AS High_Defects,
 
-The goal should be to establish a consistent process where we catch critical issues before the build reaches QA, reduce unnecessary rework, and improve overall release quality.
+        0 AS First_Run_Tests,
+        0 AS First_Pass,
+        0 AS First_Fail
 
-Can we ensure Komali is included in deployment notifications going forward so we can put this process into practice?
+    FROM ReleaseCycles rc
+    INNER JOIN BUG bg
+        ON bg.BG_DETECTED_IN_RCYC = rc.RCYC_ID
+       AND bg.BG_DETECTION_DATE >= rc.Week1_Start
+       AND bg.BG_DETECTION_DATE <
+           rc.Week1_End_Exclusive
+
+    GROUP BY
+        rc.REL_ID,
+        rc.REL_NAME,
+        rc.RCYC_ID,
+        rc.RCYC_NAME,
+        rc.RCYC_START_DATE,
+        rc.RCYC_END_DATE,
+        rc.Week1_Start,
+        rc.Week1_End_Exclusive,
+        COALESCE(NULLIF(bg.BG_PROJECT, ''), 'Unspecified')
+
+    UNION ALL
+
+    -- First-pass execution metrics
+    SELECT
+        rc.REL_ID,
+        rc.REL_NAME,
+        rc.RCYC_ID,
+        rc.RCYC_NAME,
+        rc.RCYC_START_DATE,
+        rc.RCYC_END_DATE,
+        rc.Week1_Start,
+        rc.Week1_End_Exclusive,
+
+        COALESCE(
+            NULLIF(fr.Application, ''),
+            'Unspecified'
+        ) AS Application,
+
+        0 AS Total_Defects,
+        0 AS High_Defects,
+
+        COUNT(*) AS First_Run_Tests,
+
+        SUM(CASE
+            WHEN fr.RN_STATUS = 'Passed'
+            THEN 1 ELSE 0
+        END) AS First_Pass,
+
+        SUM(CASE
+            WHEN fr.RN_STATUS = 'Failed'
+            THEN 1 ELSE 0
+        END) AS First_Fail
+
+    FROM ReleaseCycles rc
+    INNER JOIN FirstRuns fr
+        ON fr.CY_ASSIGN_RCYC = rc.RCYC_ID
+       AND fr.RunRank = 1
+       AND fr.RN_EXECUTION_DATE >= rc.Week1_Start
+       AND fr.RN_EXECUTION_DATE <
+           rc.Week1_End_Exclusive
+
+    GROUP BY
+        rc.REL_ID,
+        rc.REL_NAME,
+        rc.RCYC_ID,
+        rc.RCYC_NAME,
+        rc.RCYC_START_DATE,
+        rc.RCYC_END_DATE,
+        rc.Week1_Start,
+        rc.Week1_End_Exclusive,
+        COALESCE(NULLIF(fr.Application, ''), 'Unspecified')
+)
+
+SELECT
+    YEAR(Week1_Start) AS Report_Year,
+    Application,
+    REL_NAME AS Release_Name,
+    RCYC_NAME AS Cycle_Name,
+
+    CAST(RCYC_START_DATE AS DATE) AS Cycle_Start,
+    CAST(RCYC_END_DATE AS DATE) AS Cycle_End,
+
+    Week1_Start,
+    DATEADD(DAY, -1, Week1_End_Exclusive)
+        AS Week1_End,
+
+    SUM(Total_Defects) AS First_Week_Defects,
+    SUM(High_Defects) AS High_Severity_Defects,
+
+    SUM(First_Run_Tests) AS First_Run_Tests,
+    SUM(First_Pass) AS First_Pass_Count,
+    SUM(First_Fail) AS First_Fail_Count,
+
+    CAST(
+        100.0 * SUM(First_Pass) /
+        NULLIF(SUM(First_Run_Tests), 0)
+        AS DECIMAL(6,2)
+    ) AS First_Pass_Percentage,
+
+    CAST(
+        100.0 * SUM(First_Fail) /
+        NULLIF(SUM(First_Run_Tests), 0)
+        AS DECIMAL(6,2)
+    ) AS First_Fail_Percentage
+
+FROM MetricRows
+GROUP BY
+    Application,
+    REL_NAME,
+    RCYC_NAME,
+    RCYC_START_DATE,
+    RCYC_END_DATE,
+    Week1_Start,
+    Week1_End_Exclusive
+
+ORDER BY
+    Release_Name,
+    Application,
+    Cycle_Start;
