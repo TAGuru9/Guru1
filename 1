@@ -1,94 +1,31 @@
-DECLARE @Year INT = 2026;
+DECLARE @SQL NVARCHAR(MAX);
 
-;WITH DefectData AS
-(
-    SELECT
-        B.BG_BUG_ID AS Defect_ID,
-        YEAR(B.BG_DETECTION_DATE) AS Defect_Year,
-
-        -- Replace BG_USER_01 with your Application field
-        COALESCE(
-            NULLIF(LTRIM(RTRIM(B.BG_USER_01)), ''),
-            'Not Assigned'
-        ) AS Application,
-
-        CASE
-            WHEN UPPER(LTRIM(RTRIM(B.BG_DETECTION_PHASE)))
-                 IN ('QA', 'QUALITY ASSURANCE')
-                THEN 'QA'
-
-            WHEN UPPER(LTRIM(RTRIM(B.BG_DETECTION_PHASE)))
-                 IN ('UAT', 'USER ACCEPTANCE TESTING')
-                THEN 'UAT'
-
-            ELSE 'OTHER'
-        END AS Detected_Phase
-
-    FROM [amfc_isqat_db].[td].[BUG] B
-
-    WHERE B.BG_DETECTION_DATE >= DATEFROMPARTS(@Year, 1, 1)
-      AND B.BG_DETECTION_DATE < DATEFROMPARTS(@Year + 1, 1, 1)
-
-      -- Optional: Filter specific applications
-      AND B.BG_USER_01 IN
-      (
-          'Application A',
-          'Application B',
-          'Application C'
-      )
-),
-
-ApplicationCounts AS
-(
-    SELECT
-        Defect_Year,
-        Application,
-
-        COUNT(DISTINCT CASE
-            WHEN Detected_Phase = 'QA'
-            THEN Defect_ID
-        END) AS QA_Defects,
-
-        COUNT(DISTINCT CASE
-            WHEN Detected_Phase = 'UAT'
-            THEN Defect_ID
-        END) AS UAT_Defects
-
-    FROM DefectData
-
-    WHERE Detected_Phase IN ('QA', 'UAT')
-
-    GROUP BY GROUPING SETS
-    (
-        (Defect_Year, Application),
-        (Defect_Year)
-    )
+SELECT @SQL = STRING_AGG(
+    CAST(
+        'SELECT ''' + COLUMN_NAME + ''' AS Column_Name,
+                CAST(' + QUOTENAME(COLUMN_NAME) +
+                ' AS NVARCHAR(4000)) AS Field_Value,
+                COUNT(*) AS Defect_Count
+         FROM [amfc_isqat_db].[td].[BUG]
+         WHERE BG_DETECTION_DATE >= ''2026-01-01''
+           AND BG_DETECTION_DATE < ''2027-01-01''
+           AND (
+                UPPER(LTRIM(RTRIM(CAST(' +
+                QUOTENAME(COLUMN_NAME) +
+                ' AS NVARCHAR(4000))))) LIKE ''%QA%''
+                OR UPPER(LTRIM(RTRIM(CAST(' +
+                QUOTENAME(COLUMN_NAME) +
+                ' AS NVARCHAR(4000))))) LIKE ''%UAT%''
+           )
+         GROUP BY ' + QUOTENAME(COLUMN_NAME)
+        AS NVARCHAR(MAX)
+    ),
+    ' UNION ALL '
 )
+FROM [amfc_isqat_db].INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = 'td'
+  AND TABLE_NAME = 'BUG'
+  AND COLUMN_NAME LIKE 'BG_USER[_]%';
 
-SELECT
-    Defect_Year,
-
-    COALESCE(Application, 'GRAND TOTAL') AS Application,
-
-    QA_Defects,
-    UAT_Defects,
-
-    QA_Defects + UAT_Defects AS Total_Defects,
-
-    CAST(
-        100.0 * QA_Defects /
-        NULLIF(QA_Defects + UAT_Defects, 0)
-        AS DECIMAL(10,2)
-    ) AS QA_Percentage,
-
-    CAST(
-        100.0 * UAT_Defects /
-        NULLIF(QA_Defects + UAT_Defects, 0)
-        AS DECIMAL(10,2)
-    ) AS UAT_Percentage
-
-FROM ApplicationCounts
-
-ORDER BY
-    CASE WHEN Application IS NULL THEN 1 ELSE 0 END,
-    Application;
+IF @SQL IS NOT NULL
+    EXEC sp_executesql @SQL;
