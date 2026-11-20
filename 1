@@ -1,31 +1,69 @@
-DECLARE @SQL NVARCHAR(MAX);
+DECLARE @Year INT = 2026;
 
-SELECT @SQL = STRING_AGG(
-    CAST(
-        'SELECT ''' + COLUMN_NAME + ''' AS Column_Name,
-                CAST(' + QUOTENAME(COLUMN_NAME) +
-                ' AS NVARCHAR(4000)) AS Field_Value,
-                COUNT(*) AS Defect_Count
-         FROM [amfc_isqat_db].[td].[BUG]
-         WHERE BG_DETECTION_DATE >= ''2026-01-01''
-           AND BG_DETECTION_DATE < ''2027-01-01''
-           AND (
-                UPPER(LTRIM(RTRIM(CAST(' +
-                QUOTENAME(COLUMN_NAME) +
-                ' AS NVARCHAR(4000))))) LIKE ''%QA%''
-                OR UPPER(LTRIM(RTRIM(CAST(' +
-                QUOTENAME(COLUMN_NAME) +
-                ' AS NVARCHAR(4000))))) LIKE ''%UAT%''
-           )
-         GROUP BY ' + QUOTENAME(COLUMN_NAME)
-        AS NVARCHAR(MAX)
-    ),
-    ' UNION ALL '
+;WITH DefectData AS
+(
+    SELECT
+        B.BG_BUG_ID AS Defect_ID,
+        YEAR(B.BG_DETECTION_DATE) AS Defect_Year,
+
+        COALESCE(
+            NULLIF(LTRIM(RTRIM(B.BG_PROJECT)), ''),
+            'Not Assigned'
+        ) AS Application,
+
+        CASE
+            WHEN UPPER(LTRIM(RTRIM(B.BG_USER_01))) = 'QA'
+                THEN 'QA'
+
+            WHEN UPPER(LTRIM(RTRIM(B.BG_USER_01)))
+                 IN ('UAT', 'UAT_SSC')
+                THEN 'UAT'
+
+            ELSE 'OTHER'
+        END AS Detected_Phase
+
+    FROM [amfc_isqat_db].[td].[BUG] B
+
+    WHERE B.BG_DETECTION_DATE >= DATEFROMPARTS(@Year, 1, 1)
+      AND B.BG_DETECTION_DATE < DATEFROMPARTS(@Year + 1, 1, 1)
 )
-FROM [amfc_isqat_db].INFORMATION_SCHEMA.COLUMNS
-WHERE TABLE_SCHEMA = 'td'
-  AND TABLE_NAME = 'BUG'
-  AND COLUMN_NAME LIKE 'BG_USER[_]%';
 
-IF @SQL IS NOT NULL
-    EXEC sp_executesql @SQL;
+SELECT
+    Defect_Year,
+
+    CASE
+        WHEN GROUPING(Application) = 1
+            THEN 'GRAND TOTAL'
+        ELSE Application
+    END AS Application,
+
+    COUNT(DISTINCT CASE
+        WHEN Detected_Phase = 'QA'
+        THEN Defect_ID
+    END) AS QA_Defects,
+
+    COUNT(DISTINCT CASE
+        WHEN Detected_Phase = 'UAT'
+        THEN Defect_ID
+    END) AS UAT_Defects,
+
+    COUNT(DISTINCT Defect_ID) AS Total_Defects,
+
+    CAST(
+        100.0 * COUNT(DISTINCT CASE
+            WHEN Detected_Phase = 'UAT'
+            THEN Defect_ID END)
+        / NULLIF(COUNT(DISTINCT Defect_ID), 0)
+        AS DECIMAL(10,2)
+    ) AS UAT_Percentage
+
+FROM DefectData
+WHERE Detected_Phase IN ('QA', 'UAT')
+
+GROUP BY ROLLUP (Defect_Year, Application)
+
+HAVING GROUPING(Defect_Year) = 0
+
+ORDER BY
+    GROUPING(Application),
+    Application;
